@@ -68,7 +68,8 @@ class FinderParser:
         worker = self._get_worker()
 
         if self.verbose:
-            print(f"Finder: parsing {len(files)} file(s) with dialect={self.dialect}")
+            print("==== Finder Parse ====")
+            print(f"Dialect: {self.dialect} Files: {len(files)}")
 
         for p in files:
             d, a, extras = worker.parse_file(p)
@@ -78,18 +79,23 @@ class FinderParser:
 
             if self.verbose:
                 print(
-                    "Finder file: {path} detections={dets} annotations={anns} start={start} end={end} playback={playback}".format(
+                    "file={path} det={dets} ann={anns} start={start} end={end} playback={playback}".format(
                         path=p,
                         dets=len(d),
                         anns=len(a),
-                        start=extras.get("started_at"),
-                        end=extras.get("finished_at"),
+                        start=extras.get("started_at") or "-",
+                        end=extras.get("finished_at") or "-",
                         playback=extras.get("playback_time") or "-",
                     )
                 )
 
+        pre_det = len(dets_all)
+        pre_ann = len(ann_all)
+
         dets_all = deduplicate_detections(dets_all)
         ann_all = deduplicate_annotations(ann_all)
+        dup_det_removed = pre_det - len(dets_all)
+        dup_ann_removed = pre_ann - len(ann_all)
         # Sort detections by timestamp ascending
         dets_all.sort(key=lambda x: x.timestamp)
 
@@ -141,13 +147,25 @@ class FinderParser:
         doc = FinalDoc(meta=meta, annotations=annotations, detections=dets_all)
 
         if self.verbose:
+            print("---- Summary ----")
             print(
-                "Finder summary: files={files} detections={dets} annotations={anns} start={start} end={end}".format(
-                    files=len(files),
-                    dets=stats_total.get("detections"),
-                    anns=stats_total.get("annotations"),
-                    start=started_at_iso,
-                    end=finished_at_iso,
+                "Detections: total={total} unique={uniq} removed={removed}".format(
+                    total=pre_det,
+                    uniq=len(dets_all),
+                    removed=dup_det_removed,
+                )
+            )
+            print(
+                "Annotations: total={total} unique={uniq} removed={removed}".format(
+                    total=pre_ann,
+                    uniq=len(ann_all),
+                    removed=dup_ann_removed,
+                )
+            )
+            print(
+                "Window: start={start} end={end}".format(
+                    start=meta.started_at or "-",
+                    end=meta.finished_at or "-",
                 )
             )
         return doc
