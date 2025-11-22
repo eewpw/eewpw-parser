@@ -1,12 +1,28 @@
 # -*- coding: utf-8 -*-
 import re
-import json
+from dataclasses import dataclass, field
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import List, Tuple, Dict, Any, Optional
 from eewpw_parser.schemas import Detection, DetectionCore, FaultVertex, GMObs, Annotation
 from eewpw_parser.utils import to_iso_utc_z, epoch_to_iso_z, trim
 from eewpw_parser.config import load_profile
+
+
+@dataclass
+class FinderStreamState:
+    """
+    Holds incremental parsing state so we can process streaming log input
+    without losing partial blocks between chunks.
+    """
+    buffer: List[str] = field(default_factory=list)
+    pending_station_list: Optional[List[tuple]] = None
+    version_by_event: Dict[str, int] = field(default_factory=dict)
+    file_start_ts_iso: Optional[str] = None
+    file_end_ts_iso: Optional[str] = None
+    playback_time_iso: Optional[str] = None
+    line_offset: int = 0
+    partial_line: str = ""
 
 
 class FinderBaseDialect:
@@ -66,6 +82,16 @@ class FinderBaseDialect:
 
     # The dialect parser profile JSON
     PROFILE_NAME: str = "profiles/finder_time_vs_mag.json"
+    verbose: bool = False
+
+    @property
+    def profile(self) -> dict:
+        """
+        Cached accessor for the annotation/profile config.
+        """
+        if not hasattr(self, "_profile_cache"):
+            self._profile_cache = load_profile(self.PROFILE_NAME)
+        return self._profile_cache
 
 
     def parse_file(self, path: str, algo: str = "finder", dialect: str = "scfinder") -> Tuple[List[Detection], List[Annotation], Dict[str, Any]]:
@@ -93,22 +119,34 @@ class FinderBaseDialect:
         """
         dets: List[Detection] = []
         ann: List[Annotation] = []
+        state = FinderStreamState()
 
+        # Single-pass streaming parse to stay real-time friendly
+        batch: List[str] = []
         with open(path, "r", encoding="utf-8", errors="ignore") as f:
-            lines = f.readlines()
+            for line in f:
+                batch.append(line)
+                if len(batch) >= 500:
+                    d, a, state = self.parse_stream(batch, state, finalize=False)
+                    dets.extend(d)
+                    ann.extend(a)
+                    batch = []
 
-        # First pass: annotations and file-level timestamps
-        ann, file_start_ts_iso, file_end_ts_iso, playback_time_iso = self._parse_annotations(lines)
+        if batch:
+            d, a, state = self.parse_stream(batch, state, finalize=False)
+            dets.extend(d)
+            ann.extend(a)
 
-        # Second pass: detections
-        dets = self._parse_detections(lines)
+        d, a, state = self.parse_stream([], state, finalize=True)
+        dets.extend(d)
+        ann.extend(a)
 
         # Build per-file extras block
         extras: Dict[str, Any] = {
             "file": str(path),
-            "playback_time": playback_time_iso,
-            "started_at": file_start_ts_iso,
-            "finished_at": file_end_ts_iso,
+            "playback_time": state.playback_time_iso,
+            "started_at": state.file_start_ts_iso,
+            "finished_at": state.file_end_ts_iso,
             "stats": {
                 "detections": len(dets),
                 "annotations": len(ann),
@@ -123,44 +161,10 @@ class FinderBaseDialect:
         First pass over the log lines to extract annotations and
         derive file-level timestamps (start, end, playback).
         """
-        ann: List[Annotation] = []
-
-        file_start_ts_iso: Optional[str] = None
-        file_end_ts_iso: Optional[str] = None
-        playback_time_iso: Optional[str] = None
-
-        for i, line in enumerate(lines):
-            m = self.P_PREFIX_TS.search(line)
-            if not m:
-                continue
-            ts_raw, msg = m.group(1), m.group(2)
-
-            ts_iso = to_iso_utc_z(ts_raw)
-            if file_start_ts_iso is None:
-                file_start_ts_iso = ts_iso
-            file_end_ts_iso = ts_iso
-
-            # Detect playback start line ("Starting scfinder")
-            if playback_time_iso is None and self.START_PLAYBACK_RE and self.START_PLAYBACK_RE.search(line):
-                playback_time_iso = ts_iso
-
-            # Annotation rules are driven by the profile JSON.
-            profile = load_profile(self.PROFILE_NAME)
-            patterns_cfg = profile.get("patterns", {})
-
-            for pid, pat in patterns_cfg.items():
-                if pid == "timestamp_regex":
-                    continue
-                if re.search(pat, line):
-                    ann.append(Annotation(
-                        timestamp=ts_iso,
-                        pattern=pat,
-                        line=i + 1,
-                        text=line.rstrip("\n"),
-                        pattern_id=pid
-                    ))
-
-        return ann, file_start_ts_iso, file_end_ts_iso, playback_time_iso
+        state = FinderStreamState()
+        ann = self._parse_annotations_stream(lines, state)
+        state.line_offset += len(lines)
+        return ann, state.file_start_ts_iso, state.file_end_ts_iso, state.playback_time_iso
 
     def _pick_detection_timestamp(
         self,
@@ -184,17 +188,83 @@ class FinderBaseDialect:
         """
         Second pass over the log lines to extract detections.
         """
+        state = FinderStreamState()
+        dets, _ = self._parse_detections_stream(lines, state, finalize=True)
+        return dets
+
+    # --- Streaming-friendly helpers ---
+
+    def _parse_annotations_stream(
+        self,
+        lines: List[str],
+        state: FinderStreamState,
+    ) -> List[Annotation]:
+        """
+        Incremental annotation extraction. Updates state timestamps and uses
+        state.line_offset to emit absolute line numbers.
+        """
+        ann: List[Annotation] = []
+        patterns_cfg = self.profile.get("patterns", {})
+
+        for idx, line in enumerate(lines):
+            absolute_line = state.line_offset + idx + 1
+            m = self.P_PREFIX_TS.search(line)
+            if not m:
+                continue
+
+            ts_raw, msg = m.group(1), m.group(2)
+            ts_iso = to_iso_utc_z(ts_raw)
+
+            if state.file_start_ts_iso is None:
+                state.file_start_ts_iso = ts_iso
+            state.file_end_ts_iso = ts_iso
+
+            if (
+                state.playback_time_iso is None
+                and self.START_PLAYBACK_RE
+                and self.START_PLAYBACK_RE.search(line)
+            ):
+                state.playback_time_iso = ts_iso
+
+            for pid, pat in patterns_cfg.items():
+                if pid == "timestamp_regex":
+                    continue
+                if re.search(pat, line):
+                    ann.append(
+                        Annotation(
+                            timestamp=ts_iso,
+                            pattern=pat,
+                            line=absolute_line,
+                            text=line.rstrip("\n"),
+                            pattern_id=pid,
+                        )
+                    )
+
+        return ann
+
+    def _parse_detections_stream(
+        self,
+        lines: List[str],
+        state: FinderStreamState,
+        finalize: bool = False,
+    ) -> Tuple[List[Detection], int]:
+        """
+        Incremental detection extraction.
+
+        Returns (detections, consumed_lines_count). Lines beyond the consumed
+        prefix remain buffered for the next call.
+        """
         dets: List[Detection] = []
         i = 0
-        version_by_event: Dict[str, int] = {}
-        pending_station_list: Optional[List[tuple]] = None
+        pending_station_list = state.pending_station_list
+        version_by_event = state.version_by_event
 
         while i < len(lines):
             line = lines[i]
 
-            # Station block capture
+            # Station block capture; if the block is incomplete and we're not
+            # finalizing, keep it buffered for the next call.
             if self.P_STATION_HEADER.search(line):
-                # consume rows while they match
                 j = i + 1
                 stations = []
                 while j < len(lines):
@@ -216,11 +286,18 @@ class FinderBaseDialect:
                                     float(lat),
                                     float(lon),
                                     trim(sta),
-                                    float(t_epoch),  # epoch seconds
-                                    float(pga),      # PGA amplitude
+                                    float(t_epoch),
+                                    float(pga),
                                 )
                             )
                     j += 1
+
+                if not finalize and j >= len(lines) and (
+                    j == len(lines) or self.P_STATION_ROW.findall(lines[-1])
+                ):
+                    state.pending_station_list = pending_station_list
+                    return dets, i
+
                 pending_station_list = stations
                 i = j
                 continue
@@ -232,15 +309,18 @@ class FinderBaseDialect:
 
             event_id = m_eid.group(1)
 
-            # Look-ahead small window to gather fields
             get_mag = get_lat = get_lon = get_dep = get_lik = get_otm = None
             rupture_list: List[FaultVertex] = []
             emission_ts_iso: Optional[str] = None
 
             j = i + 1
-            # Scan a reasonable window; we’ll stop once we hit a timestamped line
-            while j < len(lines) and j < i + 200:
+            next_event_idx: Optional[int] = None
+            while j < len(lines):
                 s = lines[j]
+
+                if self.P_EVENT_ID.search(s):
+                    next_event_idx = j
+                    break
 
                 if not emission_ts_iso:
                     mp = self.P_PREFIX_TS.search(s)
@@ -259,8 +339,6 @@ class FinderBaseDialect:
                     get_lik = float(m.group(1))
                 if (m := self.P_GET_OTM.search(s)):
                     get_otm = m.group(1)
-                # azimuth captured but not yet used
-                # if (m := self.P_GET_AZM.search(s)): get_azm = float(m.group(1))
 
                 if (m := self.P_GET_RUP.search(s)):
                     coords = self.P_RUP_PT.findall(m.group(1))
@@ -275,9 +353,10 @@ class FinderBaseDialect:
                                 for a, b, c in coords
                             ]
                         )
-                        # Continuations on subsequent lines: accept only pure coord lines
                         k = j + 1
-                        while k < len(lines):
+                        while k < len(lines) and (
+                            next_event_idx is None or k < next_event_idx
+                        ):
                             mc = self.P_RUP_LINE.match(lines[k])
                             if not mc:
                                 break
@@ -290,9 +369,16 @@ class FinderBaseDialect:
                                 )
                             )
                             k += 1
+                        j = k
+                        continue
                 j += 1
 
-            # Build DetectionCore (we always emit, even if some fields are missing)
+            block_end = next_event_idx if next_event_idx is not None else j
+
+            if not finalize and block_end >= len(lines):
+                state.pending_station_list = pending_station_list
+                return dets, i
+
             if get_otm is None:
                 core = DetectionCore(
                     id=str(event_id),
@@ -315,18 +401,15 @@ class FinderBaseDialect:
                     likelihood=float(get_lik) if get_lik is not None else None,
                 )
 
-            # Decide which timestamp to emit for this detection
             timestamp_iso = self._pick_detection_timestamp(
-                block_lines=lines[i:j],
+                block_lines=lines[i:block_end],
                 emission_ts_iso=emission_ts_iso,
                 core_orig_time=core.orig_time,
             )
 
-            # Versioning per event_id
             v = version_by_event.get(event_id, 0) + 1
             version_by_event[event_id] = v
 
-            # gm_info from captured station list
             pga_list: List[GMObs] = []
             if pending_station_list:
                 for lat, lon, sncl, t_epoch, pga in pending_station_list:
@@ -340,7 +423,6 @@ class FinderBaseDialect:
                             time=epoch_to_iso_z(str(t_epoch)),
                         )
                     )
-                # Station list is consumed once per detection set
                 pending_station_list = None
 
             dets.append(
@@ -348,7 +430,7 @@ class FinderBaseDialect:
                     timestamp=timestamp_iso,
                     event_id=str(event_id),
                     category="live",
-                    instance="finder@unknown",  # can be overridden later
+                    instance="finder@unknown",
                     orig_sys="finder",
                     version=int(v),
                     core_info=core,
@@ -357,9 +439,50 @@ class FinderBaseDialect:
                 )
             )
 
-            i = j + 1
+            i = block_end
 
-        return dets
+        state.pending_station_list = pending_station_list
+        state.version_by_event = version_by_event
+        return dets, len(lines)
+
+    def parse_stream(
+        self,
+        new_lines: List[str],
+        state: Optional[FinderStreamState] = None,
+        finalize: bool = False,
+    ) -> Tuple[List[Detection], List[Annotation], FinderStreamState]:
+        """
+        Parse a batch of new lines and retain state for the next chunk.
+
+        finalize=True flushes any buffered partial block.
+        """
+        state = state or FinderStreamState()
+
+        incoming = list(new_lines)
+        if state.partial_line:
+            if incoming:
+                incoming[0] = state.partial_line + incoming[0]
+            else:
+                incoming = [state.partial_line]
+            state.partial_line = ""
+
+        state.buffer.extend(incoming)
+
+        if not finalize and state.buffer and not state.buffer[-1].endswith("\n"):
+            state.partial_line = state.buffer.pop()
+        elif finalize and state.partial_line:
+            state.buffer.append(state.partial_line)
+            state.partial_line = ""
+
+        dets, consumed_idx = self._parse_detections_stream(
+            state.buffer, state, finalize=finalize
+        )
+        ann = self._parse_annotations_stream(state.buffer[:consumed_idx], state)
+
+        state.buffer = state.buffer[consumed_idx:]
+        state.line_offset += consumed_idx
+
+        return dets, ann, state
     
 
 # === Specific Dialect Implementations === #
@@ -410,14 +533,16 @@ class ShakeAlertFinderDialect(FinderBaseDialect):
         r"(\d{4}[/-]\d{2}[/-]\d{2}[\s,]\d{2}:\d{2}:\d{2}(?:[:.]\d{1,6})?)"
     )
 
-    def _parse_annotations(self, lines: List[str]) -> Tuple[List[Annotation], Optional[str], Optional[str], Optional[str]]:
+    def _parse_annotations_stream(
+        self,
+        lines: List[str],
+        state: FinderStreamState,
+    ) -> List[Annotation]:
         ann: List[Annotation] = []
-        file_start_ts_iso = None
-        file_end_ts_iso = None
-        playback_time_iso = None
+        patterns_cfg = self.profile.get("patterns", {})
 
-        for i, line in enumerate(lines):
-            # Look for embedded absolute timestamps, ignore the 00:00:00:xxx prefix
+        for idx, line in enumerate(lines):
+            absolute_line = state.line_offset + idx + 1
             m_inline = self.P_INLINE_ABS_TS.search(line)
             if not m_inline:
                 continue
@@ -426,12 +551,9 @@ class ShakeAlertFinderDialect(FinderBaseDialect):
             ts_raw_norm = ts_raw.replace(",", " ")
             ts_iso = to_iso_utc_z(ts_raw_norm)
 
-            if file_start_ts_iso is None:
-                file_start_ts_iso = ts_iso
-            file_end_ts_iso = ts_iso
-
-            profile = load_profile(self.PROFILE_NAME)
-            patterns_cfg = profile.get("patterns", {})
+            if state.file_start_ts_iso is None:
+                state.file_start_ts_iso = ts_iso
+            state.file_end_ts_iso = ts_iso
 
             for pid, pat in patterns_cfg.items():
                 if pid == "timestamp_regex":
@@ -441,13 +563,19 @@ class ShakeAlertFinderDialect(FinderBaseDialect):
                         Annotation(
                             timestamp=ts_iso,
                             pattern=pat,
-                            line=i + 1,
+                            line=absolute_line,
                             text=line.rstrip("\n"),
                             pattern_id=pid,
                         )
                     )
 
-        return ann, file_start_ts_iso, file_end_ts_iso, playback_time_iso
+        return ann
+
+    def _parse_annotations(self, lines: List[str]) -> Tuple[List[Annotation], Optional[str], Optional[str], Optional[str]]:
+        state = FinderStreamState()
+        ann = self._parse_annotations_stream(lines, state)
+        state.line_offset += len(lines)
+        return ann, state.file_start_ts_iso, state.file_end_ts_iso, state.playback_time_iso
 
     def _parse_detections(self, lines: List[str]) -> List[Detection]:
         """
@@ -455,19 +583,28 @@ class ShakeAlertFinderDialect(FinderBaseDialect):
         blocks. We ignore the elapsed-time log prefix and parse the XML payload
         directly into Detection objects.
         """
+        state = FinderStreamState()
+        dets, _ = self._parse_detections_stream(lines, state, finalize=True)
+        return dets
+
+    def _parse_detections_stream(
+        self,
+        lines: List[str],
+        state: FinderStreamState,
+        finalize: bool = False,
+    ) -> Tuple[List[Detection], int]:
         dets: List[Detection] = []
         i = 0
+        version_by_event = state.version_by_event
 
         while i < len(lines):
             line = lines[i]
-            # Strip the "00:01:48:137|DEBUG | " style prefix if present
             payload = line.split("|", 2)[-1].lstrip() if "|" in line else line
 
             if "<event_message" not in payload:
                 i += 1
                 continue
 
-            # Buffer the XML for this event_message
             xml_lines: List[str] = [payload]
             j = i + 1
             while j < len(lines):
@@ -478,23 +615,23 @@ class ShakeAlertFinderDialect(FinderBaseDialect):
                     break
                 j += 1
 
+            if not finalize and (j >= len(lines) or "</event_message>" not in xml_lines[-1]):
+                return dets, i
+
             xml_str = "".join(l.rstrip("\n") for l in xml_lines)
 
             try:
                 root = ET.fromstring(xml_str)
             except Exception:
-                # Malformed XML; skip this block and continue
                 i = j + 1
                 continue
 
-            # event_message attributes
             timestamp_attr = root.attrib.get("timestamp")
             category = root.attrib.get("category") or "live"
             instance = root.attrib.get("instance") or "finder@unknown"
             orig_sys = root.attrib.get("orig_sys") or "finder"
             version_attr = root.attrib.get("version") or "0"
 
-            # core_info block
             core_el = root.find("core_info")
             event_id = core_el.attrib.get("id") if core_el is not None else "0"
 
@@ -534,7 +671,6 @@ class ShakeAlertFinderDialect(FinderBaseDialect):
                 likelihood=likelihood,
             )
 
-            # fault_info vertices
             fault_vertices: List[FaultVertex] = []
             for v in root.findall("fault_info/finite_fault/segment/vertices/vertex"):
                 v_lat = v.findtext("lat")
@@ -551,7 +687,6 @@ class ShakeAlertFinderDialect(FinderBaseDialect):
                 except ValueError:
                     continue
 
-            # gm_info: pga_obs
             pga_list: List[GMObs] = []
             pga_root = root.find("gm_info/gmpoint_obs/pga_obs")
             if pga_root is not None:
@@ -578,6 +713,9 @@ class ShakeAlertFinderDialect(FinderBaseDialect):
                         )
                     )
 
+            version = int(version_attr) if version_attr.isdigit() else version_by_event.get(event_id, 0) + 1
+            version_by_event[event_id] = version
+
             timestamp_final = timestamp_attr or core.orig_time
 
             dets.append(
@@ -587,17 +725,17 @@ class ShakeAlertFinderDialect(FinderBaseDialect):
                     category=category,
                     instance=instance,
                     orig_sys=orig_sys,
-                    version=int(version_attr) if version_attr.isdigit() else 0,
+                    version=int(version),
                     core_info=core,
                     fault_info=fault_vertices,
                     gm_info={"pgv_obs": [], "pga_obs": pga_list},
                 )
             )
 
-            # Continue scanning after the end of this XML block
             i = j + 1
 
-        return dets
+        state.version_by_event = version_by_event
+        return dets, len(lines)
 
 
 class NativeFinderDialect(FinderBaseDialect):

@@ -10,6 +10,12 @@ def load_config(algo_cfg_path: str = "configs/finder.json") -> Dict[str, Any]:
     configs/global.json is loaded first, then algo_cfg_path is loaded and merged on top.
     These configurations are used to guide the parsing process in the dialect parsers.
     """
+    base_dir = Path(__file__).resolve().parents[2]
+    global_path = base_dir / "configs" / "global.json"
+    algo_path = Path(algo_cfg_path)
+    if not algo_path.is_absolute():
+        algo_path = base_dir / algo_cfg_path
+
     def _deep_merge(a: Dict[str, Any], b: Dict[str, Any]) -> Dict[str, Any]:
         out = dict(a)
         for k, v in b.items():
@@ -20,9 +26,9 @@ def load_config(algo_cfg_path: str = "configs/finder.json") -> Dict[str, Any]:
         return out
 
 
-    with open("configs/global.json", "r", encoding="utf-8") as f:
+    with global_path.open("r", encoding="utf-8") as f:
         g = json.load(f)
-    with open(algo_cfg_path, "r", encoding="utf-8") as f:
+    with algo_path.open("r", encoding="utf-8") as f:
         a = json.load(f)
     return _deep_merge(g, a)
 
