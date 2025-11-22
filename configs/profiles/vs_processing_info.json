@@ -1,0 +1,9 @@
+{
+  "algorithm": "vs",
+  "dialect": "scvs",
+  "patterns": {
+    "start_event": "Start logging for event",
+    "end_event": "End logging for event",
+    "likelihood": "likelihood:"
+  }
+}
