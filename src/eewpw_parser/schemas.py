@@ -4,31 +4,32 @@ from pydantic import BaseModel, Field
 class Annotation(BaseModel):
     timestamp: str  # ISO-8601 Z
     pattern: str
-    line: int
+    line: str  # int
     text: str
     pattern_id: Optional[str] = None
 
 class GMObs(BaseModel):
     orig_sys: str
     SNCL: str
-    value: float
-    lat: float
-    lon: float
+    value: str  # float
+    lat: str  # float
+    lon: str  # float
     time: str  # ISO-8601 Z
 
 class DetectionCore(BaseModel):
     id: str
-    mag: float
-    lat: float
-    lon: float
-    depth: float
+    mag: str # float
+    lat: str # float
+    lon: str # float
+    depth: str # float
     orig_time: str  # ISO-8601 Z
-    likelihood: Optional[float] = None
+    likelihood: Optional[str] = None
 
 class FaultVertex(BaseModel):
-    lat: float
-    lon: float
-    depth: float
+    # float values, but we keep as str to preserve formatting
+    lat: str 
+    lon: str
+    depth: str
 
 class Detection(BaseModel):
     timestamp: str           # ISO-8601 Z (emission time for this detection)
@@ -36,7 +37,7 @@ class Detection(BaseModel):
     category: str
     instance: str
     orig_sys: str
-    version: int
+    version: str
     core_info: DetectionCore
     fault_info: List[FaultVertex] = Field(default_factory=list)
     gm_info: Dict[str, List[GMObs]] = Field(default_factory=lambda: {"pgv_obs": [], "pga_obs": []})
