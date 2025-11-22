@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "eewpw-parser"
+version = "0.1.0"
+description = "Deterministic, extensible log parser for EEWPW (Finder, VS, PLUM, EQInfo, EPIC)"
+requires-python = ">=3.9"
+license = { text = "GPL-3.0-or-later" }
+dependencies = [
+  "pydantic>=1.10,<2",
+  "python-dateutil>=2.8.2",
+]
+
+[project.scripts]
+eewpw-parse = "eewpw_parser.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

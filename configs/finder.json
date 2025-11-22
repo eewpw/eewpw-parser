@@ -1,0 +1,6 @@
+{
+  "algo": "finder",
+  "dialect": "scfinder",
+  "merge_multi_files": true,
+  "deduplicate_exact": false
+}
