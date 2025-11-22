@@ -37,11 +37,15 @@ Notes:
 
 ## Run Tests
 
+Run all tests:
+```bash
+python -m unittest
+```
+
+Or a specific test:
 ```bash
 python -m unittest tests/test_vs_parser.py
 ```
-
-This VS test expects sample logs at `../test-data/parser_train_data/ELM2020/scvsmag-processing-info.log` relative to the repo root (as referenced by the test). Place the file accordingly before running.
 
 ## Key Files
 

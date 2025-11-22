@@ -19,7 +19,7 @@ class TestVerboseCLI(unittest.TestCase):
         sys_stdout = sys.stdout
         sys.stdout = buf
         try:
-            parser = VSParser({"dialect": "vs_elm2020", "verbose": True})
+            parser = VSParser({"dialect": "scvs", "verbose": True})
             parser.parse([str(p) for p in files])
         finally:
             sys.stdout = sys_stdout
@@ -37,7 +37,7 @@ class TestVerboseCLI(unittest.TestCase):
 
     def test_vs_verbose_duplicate_inputs_show_removed_counts(self):
         # Baseline counts
-        base_doc = VSParser({"dialect": "vs_elm2020"}).parse([str(SAMPLE_LOG)])
+        base_doc = VSParser({"dialect": "scvs"}).parse([str(SAMPLE_LOG)])
         base_det = len(base_doc.detections)
         base_ann = len(base_doc.annotations["processing_info"])
 

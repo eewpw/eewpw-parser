@@ -13,12 +13,12 @@ from eewpw_parser.dedup import (
 from eewpw_parser.schemas import Detection, DetectionCore, Annotation
 
 
-SAMPLE_LOG = ROOT.parent / "test-data/parser_train_data/ELM2020/scvsmag-processing-info.log"
+SAMPLE_LOG = Path(__file__).resolve().parent / "test-data/scvsmag-processing-info.log"
 
 
 class TestDedup(unittest.TestCase):
     def test_vs_dedup_removes_duplicate_detections_and_annotations(self):
-        parser = VSParser({"dialect": "vs_elm2020"})
+        parser = VSParser({"dialect": "scvs"})
         doc1 = parser.parse([str(SAMPLE_LOG)])
         doc2 = parser.parse([str(SAMPLE_LOG), str(SAMPLE_LOG)])
 
