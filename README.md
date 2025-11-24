@@ -12,19 +12,18 @@ Requires Python 3.9+. Runtime deps: `pydantic<2`, `python-dateutil`.
 
 ## CLI Usage
 
-Installed script:
+Scripts:
+- `eewpw-parse`: Batch JSON or JSONL streaming.
+- `eewpw-replay-log`: Pure raw-line playback to `./tmp`.
+- `eewpw-parse-live`: Tail a log and write per-event JSONL.
+
+Batch example:
 
 ```bash
 eewpw-parse --algo finder --dialect scfinder --mode batch -o out.json /path/to/log1 /path/to/log2
 ```
 
-Dev entrypoint:
-
-```bash
-python -m eewpw_parser.cli --algo vs --dialect scvs --mode batch -o out.json /path/to/scvsmag-processing-info.log
-```
-
-Streaming JSONL mode (writes detection/annotation/meta lines with envelope fields `record_type`, `algo`, `dialect`, `instance`, `payload`):
+Streaming JSONL example:
 
 ```bash
 eewpw-parse --algo vs --dialect scvs --mode stream-jsonl --instance vs@node1 -o out.jsonl /path/to/scvsmag-processing-info.log
@@ -35,16 +34,44 @@ Notes:
 - Output formatting can be tuned via `output.pretty|indent|ensure_ascii` in config.
 - Detections are sorted by `timestamp`; per-file extras are emitted under `meta.extras["files"]`.
 
-## Replay CLI
+## Replay Log CLI
 
-Replay logs to JSONL with optional timing control (sleep between records proportional to timestamp gaps / speed):
+Pure playback of original logs. Reads raw lines from one or more input logs and writes them to fake files under `./tmp` as `fake_<basename>`. No parsing. No JSON/JSONL. No schemas or live engine.
+
+Example commands:
 
 ```bash
-eewpw-replay-log --algo vs --dialect scvs --speed 10.0 --instance vs@replay -o out.jsonl /path/to/scvsmag-processing-info.log
+eewpw-replay-log --speed 10.0 /path/to/A.log /path/to/B.log
+# Writes tmp/fake_A.log and tmp/fake_B.log. Truncates before playback.
 ```
 
-- `--speed 1.0` = real-time gaps; higher is faster; `<=0` disables sleeping.
-- Replay writes the same JSONL envelope as stream mode and appends `extras.replay` in the final meta record.
+```bash
+eewpw-replay-log --file-list ./logs.txt --speed 5
+# logs.txt contains one path per line; ignores empty lines and comments beginning with #.
+```
+
+```bash
+cat paths.txt | eewpw-replay-log --speed 2
+# If no positional args and stdin is not a TTY, reads paths from stdin.
+```
+
+Notes:
+- Playback begins “now”; relative deltas between consecutive timestamps determine sleeps.
+- Sleep = delta_seconds / speed. If speed <= 0, treat as 1; if speed < 0.001, clamp to 0.001.
+- If a line has no timestamp, reuse the previous line’s timestamp; if the first line has no timestamp, write without sleeping.
+- Always writes to `./tmp`; never writes next to the input logs.
+
+## Live CLI
+
+Tail a live log and stream per-event JSONL files.
+
+```bash
+eewpw-parse-live --algo vs --dialect scvs --logfile /path/to/log --output-dir ./out --instance vs@node1
+```
+
+Notes:
+- Writes per-event JSONL files to `--output-dir`.
+- Polling interval can be tuned via `--poll-interval` (default 0.1s).
 
 ## Streaming Design
 
