@@ -8,6 +8,15 @@ from dateutil import parser as dtp
 from eewpw_parser.sinks import JsonlStreamSink, BaseSink
 from eewpw_parser.parsers.finder.finder_parser import FinderParser
 from eewpw_parser.parsers.vs.vs_parser import VSParser
+from eewpw_parser.sources import ReplayLineSource
+
+
+def _iter_lines_for_replay(paths: list[str]):
+    """
+    Centralized file iterator for replay; currently uses ReplayLineSource.
+    """
+    source = ReplayLineSource(paths)
+    return source.iterate_files()
 
 
 class SleepSink(BaseSink):
@@ -82,6 +91,7 @@ def main():
     base_sink = JsonlStreamSink(out_path, algo=args.algo, dialect=dialect, instance=instance, verbose=args.verbose)
     sink = SleepSink(base_sink, speed=args.speed, verbose=args.verbose)
 
+    # Replay currently reuses parser path-based processing; iteration is centralized for future tailing.
     parser.parse(args.inputs, sink=sink)
     print(f"Replayed logs to JSONL: {out_path} (mode=stream, speed={args.speed})")
 

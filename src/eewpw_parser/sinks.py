@@ -98,3 +98,25 @@ class JsonlStreamSink(BaseSink):
         self._write_line(rec)
         self._fh.close()
         return None
+
+
+class CompositeSink(BaseSink):
+    def __init__(self, sinks: list[BaseSink]):
+        self._sinks = list(sinks)
+
+    def start_run(self) -> None:
+        for s in self._sinks:
+            s.start_run()
+
+    def emit_detection(self, det: Detection) -> None:
+        for s in self._sinks:
+            s.emit_detection(det)
+
+    def emit_annotation(self, profile: str, ann: Annotation) -> None:
+        for s in self._sinks:
+            s.emit_annotation(profile, ann)
+
+    def finalize(self, meta: Meta) -> Optional[FinalDoc]:
+        for s in self._sinks:
+            s.finalize(meta)
+        return None

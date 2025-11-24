@@ -28,7 +28,7 @@ This repository provides deterministic parsers for EEWPW algorithm logs. Parsers
 
 - A sink abstraction is scaffolded in `src/eewpw_parser/sinks.py`:
   - `FinalDocSink` is intended for batch/offline runs that assemble a single `FinalDoc`.
-  - `JsonlStreamSink` is intended for streaming/tailing scenarios to emit JSONL records incrementally.
+- `JsonlStreamSink` is intended for streaming/tailing scenarios to emit JSONL records incrementally.
 - Future parser orchestrators will push detections/annotations/meta into these sinks to decouple parsing from output handling.
 - CLI supports `--mode batch` (default) to emit a single JSON file or `--mode stream-jsonl` to emit JSONL lines (`record_type`, `algo`, `dialect`, `instance`, `payload`) via `JsonlStreamSink`. An optional `--instance` sets the instance id (default `<algo>@unknown`).
 - Replay CLI (`eewpw-parse-replay`) replays logs to JSONL using sinks; timing is gated by a speed factor and meta.extras carries a replay note.
@@ -42,3 +42,17 @@ This repository provides deterministic parsers for EEWPW algorithm logs. Parsers
   - `algo`, `dialect`, `instance`: identify the source.
   - `payload`: `model_dump()` of the Pydantic model (Detection/Annotation/Meta).
 - Streaming outputs always end with exactly one `meta` record.
+
+## Future: Live Follow Mode
+
+- Intended architecture (no implementation yet):
+  - Use `TailLineSource` to read a growing log file with polling.
+  - Feed lines into existing parsers (`FinderParser`, `VSParser`, etc.) with streaming sinks.
+  - Emit to `JsonlStreamSink` (or a future stdout sink) in the same JSONL envelope (`record_type`, `algo`, `dialect`, `instance`, `payload`), with a trailing meta record.
+- Example shape (conceptual):
+  ```python
+  source = TailLineSource("/var/log/finder.log", poll_interval=0.5)
+  sink = JsonlStreamSink(Path("/tmp/out.jsonl"), algo="finder", dialect="scfinder", instance="finder@node1")
+  # engine would iterate source and feed lines to the parser, which emits to sink
+  ```
+- No CLI flags or behaviour changes are committed yet; this documents the intended path for future live-follow support.
