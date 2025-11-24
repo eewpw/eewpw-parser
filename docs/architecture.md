@@ -23,3 +23,22 @@ This repository provides deterministic parsers for EEWPW algorithm logs. Parsers
 - Annotation detection runs per line using configured regex profiles; timestamps are derived from log prefixes when available.
 - File-level `started_at` / `finished_at` come from the first/last seen timestamps; in a live tail they can be updated as new lines arrive.
 - Extras for playback or per-file stats are accumulated incrementally so a streaming orchestrator can refresh `meta` without reparsing the full file.
+
+## Output sinks
+
+- A sink abstraction is scaffolded in `src/eewpw_parser/sinks.py`:
+  - `FinalDocSink` is intended for batch/offline runs that assemble a single `FinalDoc`.
+  - `JsonlStreamSink` is intended for streaming/tailing scenarios to emit JSONL records incrementally.
+- Future parser orchestrators will push detections/annotations/meta into these sinks to decouple parsing from output handling.
+- CLI supports `--mode batch` (default) to emit a single JSON file or `--mode stream-jsonl` to emit JSONL lines (`record_type`, `algo`, `dialect`, `instance`, `payload`) via `JsonlStreamSink`. An optional `--instance` sets the instance id (default `<algo>@unknown`).
+- Replay CLI (`eewpw-parse-replay`) replays logs to JSONL using sinks; timing is gated by a speed factor and meta.extras carries a replay note.
+
+### Sink details and JSONL envelope
+
+- `BaseSink` protocol defines `start_run`, `emit_detection`, `emit_annotation`, and `finalize`.
+- `FinalDocSink` collects detections/annotations in memory, deduplicates and sorts detections by timestamp, and emits a `FinalDoc` on finalize (batch behaviour).
+- `JsonlStreamSink` writes one JSON line per record with envelope keys:
+  - `record_type`: one of `detection`, `annotation`, `meta`.
+  - `algo`, `dialect`, `instance`: identify the source.
+  - `payload`: `model_dump()` of the Pydantic model (Detection/Annotation/Meta).
+- Streaming outputs always end with exactly one `meta` record.

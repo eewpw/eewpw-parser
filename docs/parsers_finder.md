@@ -10,6 +10,8 @@ Finder parsing lives in `src/eewpw_parser/parsers/finder/` and is orchestrated b
 
 `FinderParser.parse(inputs)` collects detections/annotations from each file, merges them, sorts by detection timestamp, derives meta timing from per-file extras, and returns a `FinalDoc`.
 
+`FinderParser.parse(inputs, sink=None)` also supports streaming: when a sink is provided, detections/annotations are emitted to the sink as they are parsed; meta is finalized at the end and no `FinalDoc` is returned.
+
 ## Detection extraction
 
 - Single-pass parsing: `FinderBaseDialect.parse_file` streams the file in batches, so detection and annotation extraction happen without a full-file read.

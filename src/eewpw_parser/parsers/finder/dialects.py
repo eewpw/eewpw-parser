@@ -382,23 +382,23 @@ class FinderBaseDialect:
             if get_otm is None:
                 core = DetectionCore(
                     id=str(event_id),
-                    mag=float(get_mag) if get_mag is not None else 0.0,
-                    lat=float(get_lat) if get_lat is not None else 0.0,
-                    lon=float(get_lon) if get_lon is not None else 0.0,
-                    depth=float(get_dep) if get_dep is not None else 0.0,
+                    mag=str(get_mag) if get_mag is not None else "0.0",
+                    lat=str(get_lat) if get_lat is not None else "0.0",
+                    lon=str(get_lon) if get_lon is not None else "0.0",
+                    depth=str(get_dep) if get_dep is not None else "0.0",
                     orig_time=emission_ts_iso
                     or to_iso_utc_z("1970-01-01T00:00:00Z"),
-                    likelihood=float(get_lik) if get_lik is not None else None,
+                    likelihood=str(get_lik) if get_lik is not None else None,
                 )
             else:
                 core = DetectionCore(
                     id=str(event_id),
-                    mag=float(get_mag) if get_mag is not None else 0.0,
-                    lat=float(get_lat) if get_lat is not None else 0.0,
-                    lon=float(get_lon) if get_lon is not None else 0.0,
-                    depth=float(get_dep) if get_dep is not None else 0.0,
+                    mag=str(get_mag) if get_mag is not None else "0.0",
+                    lat=str(get_lat) if get_lat is not None else "0.0",
+                    lon=str(get_lon) if get_lon is not None else "0.0",
+                    depth=str(get_dep) if get_dep is not None else "0.0",
                     orig_time=epoch_to_iso_z(get_otm),
-                    likelihood=float(get_lik) if get_lik is not None else None,
+                    likelihood=str(get_lik) if get_lik is not None else None,
                 )
 
             timestamp_iso = self._pick_detection_timestamp(
@@ -432,7 +432,7 @@ class FinderBaseDialect:
                     category="live",
                     instance="finder@unknown",
                     orig_sys="finder",
-                    version=int(v),
+                    version=str(v),
                     core_info=core,
                     fault_info=rupture_list,
                     gm_info={"pgv_obs": [], "pga_obs": pga_list},

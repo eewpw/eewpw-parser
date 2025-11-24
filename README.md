@@ -15,19 +15,36 @@ Requires Python 3.9+. Runtime deps: `pydantic<2`, `python-dateutil`.
 Installed script:
 
 ```bash
-eewpw-parse --algo finder --dialect scfinder -o out.json /path/to/log1 /path/to/log2
+eewpw-parse --algo finder --dialect scfinder --mode batch -o out.json /path/to/log1 /path/to/log2
 ```
 
 Dev entrypoint:
 
 ```bash
-python -m eewpw_parser.cli --algo vs --dialect scvs -o out.json /path/to/scvsmag-processing-info.log
+python -m eewpw_parser.cli --algo vs --dialect scvs --mode batch -o out.json /path/to/scvsmag-processing-info.log
+```
+
+Streaming JSONL mode (writes detection/annotation/meta lines with envelope fields `record_type`, `algo`, `dialect`, `instance`, `payload`):
+
+```bash
+eewpw-parse --algo vs --dialect scvs --mode stream-jsonl --instance vs@node1 -o out.jsonl /path/to/scvsmag-processing-info.log
 ```
 
 Notes:
 - Config is merged from `configs/global.json` and `configs/<algo>.json` (e.g., `configs/finder.json`).
 - Output formatting can be tuned via `output.pretty|indent|ensure_ascii` in config.
 - Detections are sorted by `timestamp`; per-file extras are emitted under `meta.extras["files"]`.
+
+## Replay CLI
+
+Replay logs to JSONL with optional timing control (sleep between records proportional to timestamp gaps / speed):
+
+```bash
+eewpw-parse-replay --algo vs --dialect scvs --speed 10.0 --instance vs@replay -o out.jsonl /path/to/scvsmag-processing-info.log
+```
+
+- `--speed 1.0` = real-time gaps; higher is faster; `<=0` disables sleeping.
+- Replay writes the same JSONL envelope as stream mode and appends `extras.replay` in the final meta record.
 
 ## Streaming Design
 

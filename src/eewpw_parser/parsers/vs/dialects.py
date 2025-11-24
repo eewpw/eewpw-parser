@@ -82,12 +82,12 @@ class VSEventState:
 
         core = DetectionCore(
             id=str(self.event_id or "0"),
-            mag=self.vs_mag if self.vs_mag is not None else 0.0,
-            lat=self.lat if self.lat is not None else 0.0,
-            lon=self.lon if self.lon is not None else 0.0,
-            depth=self.depth if self.depth is not None else 0.0,
+            mag=str(self.vs_mag) if self.vs_mag is not None else "0.0",
+            lat=str(self.lat) if self.lat is not None else "0.0",
+            lon=str(self.lon) if self.lon is not None else "0.0",
+            depth=str(self.depth) if self.depth is not None else "0.0",
             orig_time=orig_time,
-            likelihood=self.likelihood,
+            likelihood=str(self.likelihood) if self.likelihood is not None else None,
         )
 
         pga_list: List[GMObs] = []
@@ -103,9 +103,9 @@ class VSEventState:
                 GMObs(
                     orig_sys="vs",
                     SNCL=st.get("sncl", ""),
-                    value=pga_val,
-                    lat=lat,
-                    lon=lon,
+                    value=str(pga_val),
+                    lat=str(lat),
+                    lon=str(lon),
                     time=timestamp,
                 )
             )
@@ -116,7 +116,7 @@ class VSEventState:
             category="live",
             instance="vs@unknown",
             orig_sys="vs",
-            version=int(version),
+            version=str(version),
             core_info=core,
             fault_info=[],
             gm_info={"pgv_obs": [], "pga_obs": pga_list},
@@ -233,7 +233,7 @@ class VSDialect:
                     Annotation(
                         timestamp=ts_iso,
                         pattern=pat,
-                        line=state.line_offset,
+                        line=str(state.line_offset),
                         text=line.rstrip("\n"),
                         pattern_id=pid,
                     )

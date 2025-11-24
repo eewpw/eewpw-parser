@@ -15,6 +15,7 @@ dependencies = [
 
 [project.scripts]
 eewpw-parse = "eewpw_parser.cli:main"
+eewpw-parse-replay = "eewpw_parser.replay_cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

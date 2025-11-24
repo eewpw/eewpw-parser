@@ -64,3 +64,4 @@ Target log style: `scvsmag-processing-info.log` under `test-data/parser_train_da
   - Sensor blocks are accumulated into `VSEventState.stations` with PGA(H)/PGA(Z) where present; `nan` and `-1` sentinels are ignored.
   - VS-mag, creation/origin times, and likelihood are captured from their dedicated lines; timestamps are normalized via `to_iso_utc_z`.
 - `VSParser.parse` mirrors Finder’s orchestrator: merges per-file detections/annotations, sorts by timestamp, derives meta timings, and returns a `FinalDoc`.
+- `VSParser.parse(inputs, sink=None)` supports streaming sinks: with a sink, detections/annotations are emitted as they are parsed and meta is finalized to the sink; batch path (sink=None) returns a `FinalDoc`.

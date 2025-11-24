@@ -34,12 +34,12 @@ class TestDedup(unittest.TestCase):
     def test_helper_detection_exact_equality_and_non_equality(self):
         core1 = DetectionCore(
             id="e1",
-            mag=5.0,
-            lat=1.0,
-            lon=2.0,
-            depth=3.0,
+            mag="5.0",
+            lat="1.0",
+            lon="2.0",
+            depth="3.0",
             orig_time="2020-01-01T00:00:00Z",
-            likelihood=0.9,
+            likelihood="0.9",
         )
         d1 = Detection(
             timestamp="2020-01-01T00:00:01Z",
@@ -47,7 +47,7 @@ class TestDedup(unittest.TestCase):
             category="live",
             instance="vs@test",
             orig_sys="vs",
-            version=1,
+            version="1",
             core_info=core1,
             fault_info=[],
             gm_info={"pgv_obs": [], "pga_obs": []},
@@ -58,19 +58,19 @@ class TestDedup(unittest.TestCase):
             category="live",
             instance="vs@test",
             orig_sys="vs",
-            version=1,
+            version="1",
             core_info=core1,
             fault_info=[],
             gm_info={"pgv_obs": [], "pga_obs": []},
         )
         core3 = DetectionCore(
             id="e1",
-            mag=5.0,
-            lat=1.0,
-            lon=2.0,
-            depth=3.0,
+            mag="5.0",
+            lat="1.0",
+            lon="2.0",
+            depth="3.0",
             orig_time="2020-01-01T00:00:00Z",
-            likelihood=0.8,  # slight difference
+            likelihood="0.8",  # slight difference
         )
         d3 = Detection(
             timestamp="2020-01-01T00:00:02Z",
@@ -78,7 +78,7 @@ class TestDedup(unittest.TestCase):
             category="live",
             instance="vs@test",
             orig_sys="vs",
-            version=2,
+            version="2",
             core_info=core3,
             fault_info=[],
             gm_info={"pgv_obs": [], "pga_obs": []},
@@ -93,21 +93,21 @@ class TestDedup(unittest.TestCase):
         a1 = Annotation(
             timestamp="2020-01-01T00:00:00Z",
             pattern="p",
-            line=1,
+            line="1",
             text="line1",
             pattern_id="pid",
         )
         a2 = Annotation(
             timestamp="2020-01-01T00:00:00Z",
             pattern="p",
-            line=1,
+            line="1",
             text="line1",
             pattern_id="pid",
         )
         a3 = Annotation(
             timestamp="2020-01-01T00:00:00Z",
             pattern="p",
-            line=2,
+            line="2",
             text="line2",
             pattern_id="pid",
         )

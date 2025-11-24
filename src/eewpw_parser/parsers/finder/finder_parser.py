@@ -12,6 +12,7 @@ from eewpw_parser.parsers.finder.dialects import (
 )
 from eewpw_parser.utils import to_iso_utc_z
 from eewpw_parser.dedup import deduplicate_detections, deduplicate_annotations
+from eewpw_parser.sinks import BaseSink
 
 class FinderParser:
     def __init__(self, cfg: Dict[str, Any]):
@@ -58,7 +59,7 @@ class FinderParser:
         worker = self._get_worker()
         return worker.parse_stream(lines, state=state, finalize=finalize)
 
-    def parse(self, inputs: List[str]) -> FinalDoc:
+    def parse(self, inputs: List[str], sink: Optional[BaseSink] = None) -> Optional[FinalDoc]:
         files = [str(Path(p)) for p in inputs]
         # Order is whatever user provided; this is safer than glob
         dets_all = []
@@ -66,6 +67,9 @@ class FinderParser:
         per_file_extras: List[Dict[str, Any]] = []
 
         worker = self._get_worker()
+
+        if sink:
+            sink.start_run()
 
         if self.verbose:
             print("==== Finder Parse ====")
@@ -76,6 +80,12 @@ class FinderParser:
             dets_all.extend(d)
             ann_all.extend(a)
             per_file_extras.append(extras)
+
+            if sink:
+                for det in d:
+                    sink.emit_detection(det)
+                for ann in a:
+                    sink.emit_annotation("time_vs_magnitude", ann)
 
             if self.verbose:
                 print(
@@ -144,7 +154,11 @@ class FinderParser:
         # Attach annotations under a single profile key for now
         annotations = {"time_vs_magnitude": ann_all}
 
-        doc = FinalDoc(meta=meta, annotations=annotations, detections=dets_all)
+        if sink:
+            sink.finalize(meta)
+            doc = None
+        else:
+            doc = FinalDoc(meta=meta, annotations=annotations, detections=dets_all)
 
         if self.verbose:
             print("---- Summary ----")

@@ -5,7 +5,7 @@ classDiagram
     class FinderParser {
       -cfg: Dict
       -dialect: str
-      +parse(inputs) FinalDoc
+      +parse(inputs, sink=None) FinalDoc|None
     }
     class FinderStreamState {
       buffer: List~str~
@@ -35,6 +35,7 @@ classDiagram
     FinderBaseDialect <|-- NativeFinderLegacyDialect
     FinderBaseDialect --> Detection
     FinderBaseDialect --> Annotation
+    FinderParser --> BaseSink
 ```
 
 ```mermaid
@@ -42,7 +43,7 @@ classDiagram
     class VSParser {
       -cfg: Dict
       -dialect: str
-      +parse(inputs) FinalDoc
+      +parse(inputs, sink=None) FinalDoc|None
     }
     class VSDialect {
       +parse_file(path) (List~Detection~, List~Annotation~, Dict)
@@ -70,4 +71,37 @@ classDiagram
     VSStreamState --> VSEventState
     VSDialect --> Detection
     VSDialect --> Annotation
+    VSParser --> BaseSink
+```
+
+```mermaid
+classDiagram
+    class BaseSink {
+      +start_run()
+      +emit_detection(det)
+      +emit_annotation(profile, ann)
+      +finalize(meta)
+    }
+    class FinalDocSink {
+      +start_run()
+      +emit_detection(det)
+      +emit_annotation(profile, ann)
+      +finalize(meta) FinalDoc
+    }
+    class JsonlStreamSink {
+      +start_run()
+      +emit_detection(det)
+      +emit_annotation(profile, ann)
+      +finalize(meta)
+    }
+    class SleepSink {
+      +start_run()
+      +emit_detection(det)
+      +emit_annotation(profile, ann)
+      +finalize(meta)
+    }
+    BaseSink <|.. FinalDocSink
+    BaseSink <|.. JsonlStreamSink
+    BaseSink <|.. SleepSink
+    SleepSink --> JsonlStreamSink : wraps
 ```

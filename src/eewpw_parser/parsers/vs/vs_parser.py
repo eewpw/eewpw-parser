@@ -1,11 +1,12 @@
 # -*- coding: utf-8 -*-
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from pathlib import Path
 from dateutil import parser as dtp
 
 from eewpw_parser.schemas import FinalDoc, Meta
 from eewpw_parser.parsers.vs.dialects import VSDialect
 from eewpw_parser.dedup import deduplicate_detections, deduplicate_annotations
+from eewpw_parser.sinks import BaseSink
 
 
 class VSParser:
@@ -15,7 +16,7 @@ class VSParser:
         self.verbose = bool(cfg.get("verbose", False))
         self.verbose = bool(cfg.get("verbose", False))
 
-    def parse(self, inputs: List[str]) -> FinalDoc:
+    def parse(self, inputs: List[str], sink: Optional[BaseSink] = None) -> Optional[FinalDoc]:
         files = [str(Path(p)) for p in inputs]
         dets_all = []
         ann_all = []
@@ -28,6 +29,9 @@ class VSParser:
         if self.verbose:
             print("==== VS Parse ====")
             print(f"Dialect: {self.dialect} Files: {len(files)}")
+
+        if sink:
+            sink.start_run()
 
         for p in files:
             d, a, extras = worker.parse_file(p)
@@ -45,6 +49,12 @@ class VSParser:
                         end=extras.get("finished_at") or "-",
                     )
                 )
+
+            if sink:
+                for det in d:
+                    sink.emit_detection(det)
+                for ann in a:
+                    sink.emit_annotation("processing_info", ann)
 
         pre_det = len(dets_all)
         pre_ann = len(ann_all)
@@ -94,7 +104,11 @@ class VSParser:
             stats_total=stats_total,
         )
 
-        doc = FinalDoc(meta=meta, annotations={"processing_info": ann_all}, detections=dets_all)
+        if sink:
+            sink.finalize(meta)
+            doc = None
+        else:
+            doc = FinalDoc(meta=meta, annotations={"processing_info": ann_all}, detections=dets_all)
         if self.verbose:
             print("---- Summary ----")
             print(
