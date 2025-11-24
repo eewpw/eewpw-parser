@@ -35,11 +35,19 @@ class ReplayLineSource(LineSource):
 
 
 class TailLineSource(LineSource):
-    def __init__(self, path: str, poll_interval: float = 0.1, seek_end: bool = True, max_lines: int | None = None):
+    def __init__(
+        self,
+        path: str,
+        poll_interval: float = 0.1,
+        seek_end: bool = True,
+        max_lines: int | None = None,
+        follow: bool = True,
+    ):
         self.path = path
         self.poll_interval = poll_interval
         self.seek_end = seek_end
         self.max_lines = max_lines
+        self.follow = follow
 
     def __iter__(self) -> Iterable[str]:
         with open(self.path, "r", encoding="utf-8", errors="ignore") as f:
@@ -50,6 +58,8 @@ class TailLineSource(LineSource):
             while True:
                 line = f.readline()
                 if not line:
+                    if not self.follow:
+                        break
                     time.sleep(self.poll_interval)
                     continue
 

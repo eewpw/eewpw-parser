@@ -6,6 +6,9 @@ from typing import List, Tuple, Dict, Any, Optional
 from eewpw_parser.schemas import Detection, DetectionCore, FaultVertex, GMObs, Annotation
 from eewpw_parser.utils import to_iso_utc_z
 from eewpw_parser.config import load_profile
+from collections import deque
+
+VS_RECENT_LINES_MAX = 2000
 
 
 def _safe_float(val: str) -> Optional[float]:
@@ -130,6 +133,8 @@ class VSStreamState:
     line_offset: int = 0
     current_event: Optional[VSEventState] = None
     version_by_event: Dict[str, int] = field(default_factory=dict)
+    recent_lines: deque = field(default_factory=lambda: deque(maxlen=VS_RECENT_LINES_MAX))
+    absolute_line_counter: int = 0
 
 
 class VSDialect:
@@ -209,6 +214,8 @@ class VSDialect:
         line: str,
         state: VSStreamState,
     ) -> Tuple[List[Detection], List[Annotation]]:
+        state.absolute_line_counter += 1
+        state.recent_lines.append((state.absolute_line_counter, line))
         dets: List[Detection] = []
         ann: List[Annotation] = []
         state.line_offset += 1

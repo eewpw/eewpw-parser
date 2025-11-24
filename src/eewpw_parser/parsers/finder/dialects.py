@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import re
+from collections import deque
 from dataclasses import dataclass, field
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -7,6 +8,9 @@ from typing import List, Tuple, Dict, Any, Optional
 from eewpw_parser.schemas import Detection, DetectionCore, FaultVertex, GMObs, Annotation
 from eewpw_parser.utils import to_iso_utc_z, epoch_to_iso_z, trim
 from eewpw_parser.config import load_profile
+
+
+FINDER_RECENT_LINES_MAX = 2000
 
 
 @dataclass
@@ -23,6 +27,8 @@ class FinderStreamState:
     playback_time_iso: Optional[str] = None
     line_offset: int = 0
     partial_line: str = ""
+    recent_lines: deque = field(default_factory=lambda: deque(maxlen=FINDER_RECENT_LINES_MAX))
+    absolute_line_counter: int = 0
 
 
 class FinderBaseDialect:
@@ -466,13 +472,24 @@ class FinderBaseDialect:
                 incoming = [state.partial_line]
             state.partial_line = ""
 
-        state.buffer.extend(incoming)
+        # Separate complete lines from a trailing partial (when not finalizing).
+        lines_for_buffer = list(incoming)
+        if not finalize and lines_for_buffer and not lines_for_buffer[-1].endswith("\n"):
+            state.partial_line = lines_for_buffer.pop()
 
-        if not finalize and state.buffer and not state.buffer[-1].endswith("\n"):
-            state.partial_line = state.buffer.pop()
-        elif finalize and state.partial_line:
-            state.buffer.append(state.partial_line)
+        # Track recent complete lines before parsing.
+        for line in lines_for_buffer:
+            state.absolute_line_counter += 1
+            state.recent_lines.append((state.absolute_line_counter, line))
+
+        state.buffer.extend(lines_for_buffer)
+
+        if finalize and state.partial_line:
+            line = state.partial_line
+            state.buffer.append(line)
             state.partial_line = ""
+            state.absolute_line_counter += 1
+            state.recent_lines.append((state.absolute_line_counter, line))
 
         dets, consumed_idx = self._parse_detections_stream(
             state.buffer, state, finalize=finalize

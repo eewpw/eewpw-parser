@@ -40,7 +40,7 @@ Notes:
 Replay logs to JSONL with optional timing control (sleep between records proportional to timestamp gaps / speed):
 
 ```bash
-eewpw-parse-replay --algo vs --dialect scvs --speed 10.0 --instance vs@replay -o out.jsonl /path/to/scvsmag-processing-info.log
+eewpw-replay-log --algo vs --dialect scvs --speed 10.0 --instance vs@replay -o out.jsonl /path/to/scvsmag-processing-info.log
 ```
 
 - `--speed 1.0` = real-time gaps; higher is faster; `<=0` disables sleeping.

@@ -15,7 +15,7 @@ This repository provides deterministic parsers for EEWPW algorithm logs. Parsers
   - `annotations`: collected regex matches for log markers.
   - `detections`: ordered list of `Detection` items with core, fault, and GM info.
 - Each algorithm has dialect-specific logic encapsulated in dedicated classes (e.g., `SCFinderDialect`, `ShakeAlertFinderDialect`). Dialects keep regexes and timestamp rules together.
-- Real-time orientation: parsing logic is organized so it can operate incrementally on line streams (tailing live logs) rather than assuming the whole file. State objects buffer partial blocks until they can be emitted, and timestamp fallbacks avoid end-of-file assumptions.
+- Real-time orientation: parsing logic is organized so it can operate incrementally on line streams (tailing live logs) rather than assuming the whole file. State objects buffer partial blocks until they can be emitted, and timestamp fallbacks avoid end-of-file assumptions. Streaming states also keep a bounded `recent_lines` buffer with line numbers (capacity 2000) for diagnostics/future lookbacks without changing parsing semantics.
 
 ## Real-time / tailing concept
 
@@ -31,7 +31,7 @@ This repository provides deterministic parsers for EEWPW algorithm logs. Parsers
 - `JsonlStreamSink` is intended for streaming/tailing scenarios to emit JSONL records incrementally.
 - Future parser orchestrators will push detections/annotations/meta into these sinks to decouple parsing from output handling.
 - CLI supports `--mode batch` (default) to emit a single JSON file or `--mode stream-jsonl` to emit JSONL lines (`record_type`, `algo`, `dialect`, `instance`, `payload`) via `JsonlStreamSink`. An optional `--instance` sets the instance id (default `<algo>@unknown`).
-- Replay CLI (`eewpw-parse-replay`) replays logs to JSONL using sinks; timing is gated by a speed factor and meta.extras carries a replay note.
+- Replay CLI (`eewpw-replay-log`) replays logs to JSONL using sinks; timing is gated by a speed factor and meta.extras carries a replay note.
 
 ### Sink details and JSONL envelope
 

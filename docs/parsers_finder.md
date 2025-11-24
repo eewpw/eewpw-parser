@@ -33,6 +33,12 @@ Finder parsing lives in `src/eewpw_parser/parsers/finder/` and is orchestrated b
 - Timestamp selection always prefers the wall-clock prefix seen so far; otherwise it falls back to origin/epoch values so detections can be emitted even before the block is complete.
 - Station blocks are consumed once and applied to the next detection emission to avoid buffering entire files.
 
+## Rolling Buffer (Finder)
+
+- `FinderStreamState` maintains a bounded `recent_lines` deque (max 2000 entries) with tuples `(line_number, line_text)` and an `absolute_line_counter`.
+- During streaming (`parse_stream`), each complete line increments the counter and is pushed into `recent_lines`; incomplete trailing lines are held until finalized.
+- The buffer is for diagnostics/forward-looking features; parsing semantics are unchanged and the buffer is not yet used for lookbacks.
+
 ## Limitations / Improvements
 
 - Regexes are tuned to current samples and may miss variant Finder wording.

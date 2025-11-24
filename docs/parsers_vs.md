@@ -65,3 +65,9 @@ Target log style: `scvsmag-processing-info.log` under `test-data/parser_train_da
   - VS-mag, creation/origin times, and likelihood are captured from their dedicated lines; timestamps are normalized via `to_iso_utc_z`.
 - `VSParser.parse` mirrors Finder’s orchestrator: merges per-file detections/annotations, sorts by timestamp, derives meta timings, and returns a `FinalDoc`.
 - `VSParser.parse(inputs, sink=None)` supports streaming sinks: with a sink, detections/annotations are emitted as they are parsed and meta is finalized to the sink; batch path (sink=None) returns a `FinalDoc`.
+
+## Rolling Buffer (VS)
+
+- `VSStreamState` keeps a bounded `recent_lines` deque (max 2000 entries) with `(line_number, line_text)` and an `absolute_line_counter`.
+- Each call to `feed_line` records the incoming line into this buffer before parsing; buffers are not yet used for lookbacks.
+- The buffer is intended for diagnostics and future real-time features; detection/annotation semantics remain unchanged.
