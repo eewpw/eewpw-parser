@@ -118,18 +118,40 @@ def playback_file(
     speed: float,
 ) -> None:
     """Replay a single file into its fake target with timing based on extracted timestamps."""
-    prev_ts: Optional[datetime] = None
+    # First, count total number of lines for progress reporting.
+    try:
+        with src_path.open("r", encoding="utf-8", errors="ignore") as f_count:
+            total_lines = sum(1 for _ in f_count)
+    except Exception:
+        total_lines = None
+
+    prev_ts = None
+    processed = 0
+
     with src_path.open("r", encoding="utf-8", errors="ignore") as f_in, dst_path.open(
         "a", encoding="utf-8"
     ) as f_out:
         for line in f_in:
             curr_ts = extract_timestamp(line)
             sleep_secs = compute_sleep_seconds(prev_ts, curr_ts, global_min_ts, speed)
+
+            processed += 1
+            if total_lines is not None and total_lines > 0:
+                msg = f"[replay:{src_path.name}] {processed}/{total_lines} lines (next in {sleep_secs:.3f}s)"
+            else:
+                msg = f"[replay:{src_path.name}] {processed} lines (next in {sleep_secs:.3f}s)"
+            print("\r" + msg, end="", flush=True)
+
             if sleep_secs > 0:
                 time.sleep(sleep_secs)
+
             f_out.write(line)
+            f_out.flush()
+
             if curr_ts is not None:
                 prev_ts = curr_ts
+
+    print()
 
 
 def parse_args() -> argparse.Namespace:
@@ -205,7 +227,7 @@ def find_earliest_ts(path: Path) -> Optional[float]:
     earliest: Optional[float] = None
     with path.open("r", encoding="utf-8", errors="ignore") as f:
         for line in f:
-            ts = _extract_ts(line)
+            ts = extract_timestamp(line)
             if ts is None:
                 continue
             if earliest is None or ts < earliest:
