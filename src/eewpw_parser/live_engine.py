@@ -1,11 +1,13 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, Optional, Tuple, List
+from typing import Optional, List
 
-from .schemas import Detection, Annotation
-from .utils import to_iso_utc_z
-from .live_writer import LiveWriter
+from dateutil import parser as dtp
+
+from .schemas import Detection, Annotation, Meta
+from .live_writer import DailyAlgoWriter
 
 # Finder streaming
 from .parsers.finder.finder_parser import FinderParser
@@ -14,26 +16,12 @@ from .parsers.finder.dialects import FinderStreamState
 from .parsers.vs.dialects import VSDialect, VSStreamState
 
 
-def _sanitize_ts_for_filename(ts_iso: str) -> str:
-    # Expect ISO like YYYY-MM-DDTHH:MM:SSZ (possibly with ms). Strip non-filename chars.
-    # Keep Z if present; drop ms.
-    ts = ts_iso
-    if "." in ts:
-        ts = ts.split(".", 1)[0] + ("Z" if ts.endswith("Z") else "")
-    return (
-        ts.replace(":", "")
-        .replace("-", "")
-        .replace("/", "")
-        .replace(" ", "T")
-    )
-
-
 class LiveEngine:
     def __init__(
         self,
         source,
         parser,
-        output_dir: Path,
+        data_root: Path,
         algo: str,
         dialect: str,
         instance: str,
@@ -41,53 +29,58 @@ class LiveEngine:
     ):
         self.source = source
         self.parser = parser
-        self.output_dir = Path(output_dir)
+        self.data_root = Path(data_root)
         self.algo = algo
         self.dialect = dialect
         self.instance = instance
         self.verbose = verbose
 
-        self.output_dir.mkdir(parents=True, exist_ok=True)
-
-        # event_id -> (writer, first_ts_iso)
-        self._writers: Dict[str, Tuple[LiveWriter, str]] = {}
+        self._daily_writer = DailyAlgoWriter(
+            data_root=self.data_root,
+            algo=self.algo,
+            dialect=self.dialect,
+            instance=self.instance,
+            verbose=self.verbose,
+        )
 
         # parser state
         self._finder_state: Optional[FinderStreamState] = None
         self._vs_state: Optional[VSStreamState] = None
+        self._last_event_id: Optional[str] = None
+        self._started_dt: Optional[datetime] = None
+        self._finished_dt: Optional[datetime] = None
+        self._closed = False
 
         # annotation profile key per algo
         self._ann_profile = {
             "finder": "time_vs_magnitude",
-            "vs": "processing_info",
+            "vs": "time_vs_magnitude",
         }.get(self.algo, "annotations")
 
-    def _get_writer(self, event_id: str, first_ts_iso: str) -> LiveWriter:
-        if event_id in self._writers:
-            return self._writers[event_id][0]
-        ts_iso = to_iso_utc_z(first_ts_iso)
-        ts_token = _sanitize_ts_for_filename(ts_iso)
-        filename = f"{ts_token}_{self.algo}_{self.instance}.jsonl"
-        path = self.output_dir / filename
-        writer = LiveWriter(path, algo=self.algo, dialect=self.dialect, instance=self.instance, verbose=self.verbose)
-        self._writers[event_id] = (writer, ts_iso)
-        if self.verbose:
-            print(f"[engine] New writer for event {event_id}: {path}")
-        return writer
+    def _parse_ts(self, ts_iso: str) -> datetime:
+        dt = dtp.parse(ts_iso)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        else:
+            dt = dt.astimezone(timezone.utc)
+        return dt
+
+    def _update_time_bounds(self, ts_iso: str) -> None:
+        dt = self._parse_ts(ts_iso)
+        if self._started_dt is None or dt < self._started_dt:
+            self._started_dt = dt
+        if self._finished_dt is None or dt > self._finished_dt:
+            self._finished_dt = dt
 
     def _emit(self, dets: List[Detection], anns: List[Annotation]) -> None:
         for det in dets:
-            eid = str(det.event_id)
-            writer = self._get_writer(eid, det.timestamp)
-            writer.write_detection(det)
+            self._update_time_bounds(det.timestamp)
+            self._last_event_id = str(det.event_id)
+            self._daily_writer.write_detection(det)
         for ann in anns:
-            # Annotations are not event-scoped in dialects; write to all open writers or skip?
-            # Strategy: write annotations to the most recent writer (last started).
-            # This keeps real-time hints attached somewhere useful without buffering.
-            if not self._writers:
-                continue
-            last_eid = next(reversed(self._writers.keys()))
-            self._writers[last_eid][0].write_annotation(self._ann_profile, ann)
+            self._update_time_bounds(ann.timestamp)
+            eid = self._last_event_id or ""
+            self._daily_writer.write_annotation(self._ann_profile, ann, eid)
 
     def run_forever(self) -> None:
         try:
@@ -108,7 +101,9 @@ class LiveEngine:
             self.shutdown()
 
     def shutdown(self) -> None:
-        # Flush parser and close all writers.
+        # Flush parser and close writer.
+        if self._closed:
+            return
         try:
             if isinstance(self.parser, FinderParser):
                 if self._finder_state is None:
@@ -121,8 +116,16 @@ class LiveEngine:
                 d, a = self.parser.flush(self._vs_state)
                 self._emit(d, a)
         finally:
-            for eid, (w, _ts) in list(self._writers.items()):
-                if self.verbose:
-                    print(f"[engine] Closing writer for event {eid}: {w.path}")
-                w.close()
-            self._writers.clear()
+            meta = Meta(
+                algo=self.algo,
+                dialect=self.dialect,
+                files=None,
+                started_at=self._started_dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ") if self._started_dt else None,
+                finished_at=self._finished_dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ") if self._finished_dt else None,
+                playback_time=None,
+                extras={},
+                stats_total={},
+            )
+            self._daily_writer.write_meta(meta)
+            self._daily_writer.close()
+            self._closed = True

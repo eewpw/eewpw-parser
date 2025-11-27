@@ -56,7 +56,7 @@ class TestCompositeSink(unittest.TestCase):
             gm_info={"pgv_obs": [], "pga_obs": []},
         )
         ann = Annotation(timestamp="2020-01-01T00:00:00Z", pattern="p", line="1", text="t", pattern_id="pid")
-        meta = Meta(algo="vs", dialect="scvs", stats_total={}, extras={})
+        meta = Meta(algo="vs", dialect="scvsmag", stats_total={}, extras={})
 
         comp.start_run()
         comp.emit_detection(det)

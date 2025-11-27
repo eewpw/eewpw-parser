@@ -39,7 +39,7 @@ class TestVerboseCLI(unittest.TestCase):
         # Baseline counts
         base_doc = VSParser({"dialect": "scvs"}).parse([str(SAMPLE_LOG)])
         base_det = len(base_doc.detections)
-        base_ann = len(base_doc.annotations["processing_info"])
+        base_ann = len(base_doc.annotations["time_vs_magnitude"])
 
         out = self._capture_verbose([SAMPLE_LOG, SAMPLE_LOG])
         m_det = re.search(r"Detections: total=(\d+) unique=(\d+) removed=(\d+)", out)

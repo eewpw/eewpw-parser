@@ -24,6 +24,7 @@ class DetectionCore(BaseModel):
     depth: str # float
     orig_time: str  # ISO-8601 Z
     likelihood: Optional[str] = None
+    vs_median_single_station_mag: Optional[str] = None
 
 class FaultVertex(BaseModel):
     # float values, but we keep as str to preserve formatting

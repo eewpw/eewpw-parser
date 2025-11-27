@@ -17,15 +17,15 @@ class TestLiveCLIStartup(unittest.TestCase):
     def test_live_cli_start_and_interrupt(self):
         with tempfile.TemporaryDirectory() as td:
             log = Path(td) / "vs.log"
-            outdir = Path(td) / "out"
+            data_root = Path(td) / "out"
             log.write_text("2025/11/24 12:00:00 [processing/info/VsMagnitude] Start logging for event: EVT1\n", encoding="utf-8")
 
             cmd = CLI + [
                 "--algo", "vs",
-                "--dialect", "scvs",
+                "--dialect", "scvsmag",
                 "--instance", "vs@test",
                 "--logfile", str(log),
-                "--output-dir", str(outdir),
+                "--data-root", str(data_root),
                 "--poll-interval", "0.01",
             ]
             proc = subprocess.Popen(cmd, env=ENV)
@@ -41,7 +41,9 @@ class TestLiveCLIStartup(unittest.TestCase):
             proc.wait(timeout=5)
 
             self.assertEqual(proc.returncode, 0)
-            self.assertTrue(outdir.exists())
+            target_dir = data_root / "live" / "raw" / "vs"
+            self.assertTrue(target_dir.exists())
+            self.assertGreater(len(list(target_dir.glob("*.jsonl"))), 0)
 
 
 if __name__ == "__main__":

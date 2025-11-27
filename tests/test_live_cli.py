@@ -17,8 +17,7 @@ SAMPLE_LOG = Path(__file__).resolve().parent / "test-data/scvsmag-processing-inf
 class TestParseLive(unittest.TestCase):
     def test_live_engine_processes_log_and_writes_output(self):
         with tempfile.TemporaryDirectory() as td:
-            out_dir = Path(td) / "out"
-            out_dir.mkdir(parents=True, exist_ok=True)
+            data_root = Path(td) / "data_root"
 
             source = TailLineSource(
                 path=str(SAMPLE_LOG),
@@ -31,16 +30,17 @@ class TestParseLive(unittest.TestCase):
             engine = LiveEngine(
                 source=source,
                 parser=parser,
-                output_dir=out_dir,
+                data_root=data_root,
                 algo="vs",
-                dialect="scvs",
+                dialect="scvsmag",
                 instance="vs@test",
                 verbose=True,
             )
 
             engine.run_forever()
 
-            files = list(out_dir.glob("*.jsonl"))
+            target_dir = data_root / "live" / "raw" / "vs"
+            files = list(target_dir.glob("*.jsonl"))
             self.assertGreater(len(files), 0)
             contents = files[0].read_text(encoding="utf-8").strip()
             self.assertGreater(len(contents), 0)

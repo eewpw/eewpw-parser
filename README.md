@@ -26,7 +26,7 @@ eewpw-parse --algo finder --dialect scfinder --mode batch -o out.json /path/to/l
 Streaming JSONL example:
 
 ```bash
-eewpw-parse --algo vs --dialect scvs --mode stream-jsonl --instance vs@node1 -o out.jsonl /path/to/scvsmag-processing-info.log
+eewpw-parse --algo vs --dialect scvsmag --mode stream-jsonl --instance vs@node1 -o out.jsonl /path/to/scvsmag-processing-info.log
 ```
 
 Notes:
@@ -66,7 +66,7 @@ Notes:
 Tail a live log and stream per-event JSONL files.
 
 ```bash
-eewpw-parse-live --algo vs --dialect scvs --logfile /path/to/log --output-dir ./out --instance vs@node1
+eewpw-parse-live --algo vs --dialect scvsmag --logfile /path/to/log --output-dir ./out --instance vs@node1
 ```
 
 Notes:
@@ -77,7 +77,7 @@ Notes:
 
 - Finder: `FinderParser` orchestrates dialects in `parsers/finder/dialects.py` using `parse_stream(lines, state, finalize)`; keeps a `FinderStreamState` for partial blocks and station tables.
 - VS: `VSDialect` processes lines incrementally via `feed_line(...)` + `flush(...)` and tracks a `VSEventState` per event between “Start/End logging for event”.
-- Annotations use regex profiles (e.g., `configs/profiles/vs_processing_info.json`) and are attached under `annotations` as `time_vs_magnitude` (Finder) or `processing_info` (VS).
+- Annotations use regex profiles (e.g., `configs/profiles/vs_time_vs_mag.json`) and are attached under `annotations` as `time_vs_magnitude` (both for Finder and VS).
 
 ## Run Tests
 

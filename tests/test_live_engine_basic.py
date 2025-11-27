@@ -26,7 +26,7 @@ class TestLiveEngineBasic(unittest.TestCase):
     def test_vs_engine_single_event(self):
         with tempfile.TemporaryDirectory() as td:
             log = Path(td) / "vs.log"
-            outdir = Path(td) / "out"
+            data_root = Path(td) / "data_root"
             write_vs_lines(log)
 
             source = TailLineSource(str(log), poll_interval=0.01, seek_end=False, max_lines=None, follow=False)
@@ -34,9 +34,9 @@ class TestLiveEngineBasic(unittest.TestCase):
             engine = LiveEngine(
                 source=source,
                 parser=parser,
-                output_dir=outdir,
+                data_root=data_root,
                 algo="vs",
-                dialect="scvs",
+                dialect="scvsmag",
                 instance="vs@test",
                 verbose=False,
             )
@@ -44,8 +44,9 @@ class TestLiveEngineBasic(unittest.TestCase):
             engine.run_forever()  # finite because follow=False
             engine.shutdown()
 
-            self.assertTrue(outdir.exists())
-            files = list(outdir.glob("*.jsonl"))
+            target_dir = data_root / "live" / "raw" / "vs"
+            self.assertTrue(target_dir.exists())
+            files = list(target_dir.glob("*.jsonl"))
             self.assertEqual(len(files), 1)
 
             content = files[0].read_text(encoding="utf-8").strip().splitlines()
@@ -54,6 +55,8 @@ class TestLiveEngineBasic(unittest.TestCase):
             self.assertTrue(any(rec.get("record_type") == "detection" for rec in parsed))
             for rec in parsed:
                 self.assertEqual(rec.get("algo"), "vs")
+                self.assertIn("event_id", rec)
+                self.assertIn("timestamp", rec)
 
 
 if __name__ == "__main__":

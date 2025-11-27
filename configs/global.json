@@ -11,5 +11,9 @@
   },
   "playback": {
     "extract_playback_time": true
+  },
+  "live": {
+    "data_root": null,
+    "retention_days": 2
   }
 }

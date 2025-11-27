@@ -3,6 +3,9 @@ __pycache__/
 *.py[codz]
 *$py.class
 
+# ./tmp directory used for tests
+tmp/
+
 # C extensions
 *.so
 

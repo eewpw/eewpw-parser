@@ -15,7 +15,7 @@ class TestLiveWriterOrdering(unittest.TestCase):
     def test_write_order_and_flush(self):
         with tempfile.TemporaryDirectory() as td:
             p = Path(td) / "event.jsonl"
-            w = LiveWriter(p, algo="vs", dialect="scvs", instance="vs@test")
+            w = LiveWriter(p, algo="vs", dialect="scvsmag", instance="vs@test")
 
             det1 = Detection(
                 timestamp="2025-01-01T00:00:01Z",

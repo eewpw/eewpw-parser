@@ -24,6 +24,20 @@ def _safe_float(val: str) -> Optional[float]:
     return f
 
 
+def parse_optional_float(value: Optional[str]) -> Optional[float]:
+    """
+    Parse optional float with nan tolerated as None.
+    """
+    if value is None:
+        return None
+    raw = value.strip()
+    if not raw:
+        return None
+    if raw.lower() == "nan":
+        return None
+    return float(raw)
+
+
 @dataclass
 class VSEventState:
     event_id: Optional[str] = None
@@ -91,6 +105,7 @@ class VSEventState:
             depth=str(self.depth) if self.depth is not None else "0.0",
             orig_time=orig_time,
             likelihood=str(self.likelihood) if self.likelihood is not None else None,
+            vs_median_single_station_mag=str(self.median_mag) if self.median_mag is not None else None,
         )
 
         pga_list: List[GMObs] = []
@@ -143,7 +158,7 @@ class VSDialect:
     Designed to work incrementally for live tailing.
     """
 
-    PROFILE_NAME: str = "profiles/vs_processing_info.json"
+    PROFILE_NAME: str = "profiles/vs_time_vs_mag.json"
 
     P_PREFIX_TS = re.compile(
         r"^(\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2})\s+\[processing/info/VsMagnitude\]\s*(.*)$"
@@ -164,7 +179,12 @@ class VSDialect:
         r"PGA\(H\):\s*([-\d.eE+]+);\s*PGV\(H\):\s*([-\d.eE+]+);\s*PGD\(H\):\s*([-\d.eE+]+)"
     )
     P_VS_MAG = re.compile(
-        r"VS-mag:\s*([-\d.eE+]+);\s*median single-station-mag:\s*([-\d.eE+]+);\s*lat:\s*([-\d.eE+]+);\s*lon:\s*([-\d.eE+]+);\s*depth\s*:\s*([-\d.eE+]+)"
+        r"VS-mag:\s*(?P<vs_mag>[-\d.eE+]+|nan)\s*;"
+        r"\s*median single-station-mag:\s*(?P<median_mag>[-\d.eE+]+|nan)\s*;"
+        r"\s*lat:\s*(?P<lat>[-\d.eE+]+)\s*;"
+        r"\s*lon:\s*(?P<lon>[-\d.eE+]+)\s*;"
+        r"\s*depth\s*:\s*(?P<depth>[-\d.eE+]+)"
+        , re.IGNORECASE
     )
     P_TIMES = re.compile(
         r"creation time:\s*([^;]+);\s*origin time:\s*([^;]+);"
@@ -306,11 +326,11 @@ class VSDialect:
             ev.current_station["pga_h"] = _safe_float(m.group(1))
 
         if (m := self.P_VS_MAG.search(message)):
-            ev.vs_mag = _safe_float(m.group(1))
-            ev.median_mag = _safe_float(m.group(2))
-            ev.lat = _safe_float(m.group(3))
-            ev.lon = _safe_float(m.group(4))
-            ev.depth = _safe_float(m.group(5))
+            ev.vs_mag = _safe_float(m.group("vs_mag"))
+            ev.median_mag = parse_optional_float(m.group("median_mag"))
+            ev.lat = _safe_float(m.group("lat"))
+            ev.lon = _safe_float(m.group("lon"))
+            ev.depth = _safe_float(m.group("depth"))
 
         if (m := self.P_TIMES.search(message)):
             try:

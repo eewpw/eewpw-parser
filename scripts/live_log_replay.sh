@@ -7,8 +7,8 @@ FINDER_DIALECT=""      # Required: Finder dialect (e.g., scfinder)
 
 # path to a VS log; leave empty to skip
 VS_LOG="tests/test-data/scvsmag-processing-info.log"              
-# Required: VS dialect (e.g., scvs)
-VS_DIALECT="scvs"          
+# Required: VS dialect (e.g., scvsmag)
+VS_DIALECT="scvsmag"          
 REPLAY_SPEED=1.0       # playback speed factor (<=0 treats as 1.0; 0-1 is slower-than-real-time; >1 is faster-than-real-time)
 LIVE_OUTPUT_DIR="./tmp/live_output"
 GRACE_SECONDS=2
@@ -104,7 +104,7 @@ done
 for entry in "${LOGS[@]}"; do
   IFS="|" read -r src algo dialect <<< "${entry}"
   fake="${TMP_DIR}/fake_$(basename "${src}")"
-  cmd=(eewpw-parse-live --algo "${algo}" --logfile "${fake}" --output-dir "${LIVE_OUTPUT_DIR}" --instance "${algo}@harness")
+  cmd=(eewpw-parse-live --algo "${algo}" --logfile "${fake}" --data-root "${LIVE_OUTPUT_DIR}" --instance "${algo}@harness")
   cmd+=(--dialect "${dialect}")
   if [[ ${VERBOSE} -eq 1 ]]; then
     cmd+=(--verbose)
@@ -132,14 +132,15 @@ set -e
 sleep "${GRACE_SECONDS}"
 
 # Validate output
-if [[ ! -d "${LIVE_OUTPUT_DIR}" ]]; then
-  echo "[harness] Missing live output dir: ${LIVE_OUTPUT_DIR}" >&2
+target_root="${LIVE_OUTPUT_DIR}/live/raw"
+if [[ ! -d "${target_root}" ]]; then
+  echo "[harness] Missing live output dir: ${target_root}" >&2
   exit 1
 fi
-shopt -s nullglob
-jsonl_files=("${LIVE_OUTPUT_DIR}"/*.jsonl)
+shopt -s nullglob globstar
+jsonl_files=("${target_root}"/**/*.jsonl)
 if [[ ${#jsonl_files[@]} -eq 0 ]]; then
-  echo "[harness] No JSONL outputs found in ${LIVE_OUTPUT_DIR}" >&2
+  echo "[harness] No JSONL outputs found in ${target_root}" >&2
   exit 1
 fi
 

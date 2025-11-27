@@ -1,5 +1,5 @@
 {
   "algo": "vs",
-  "dialect": "scvs",
+  "dialect": "scvsmag",
   "merge_multi_files": true
 }

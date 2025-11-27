@@ -18,14 +18,14 @@ SAMPLE_LOG = Path(__file__).resolve().parent / "test-data/scvsmag-processing-inf
 
 class TestDedup(unittest.TestCase):
     def test_vs_dedup_removes_duplicate_detections_and_annotations(self):
-        parser = VSParser({"dialect": "scvs"})
+        parser = VSParser({"dialect": "scvsmag"})
         doc1 = parser.parse([str(SAMPLE_LOG)])
         doc2 = parser.parse([str(SAMPLE_LOG), str(SAMPLE_LOG)])
 
         self.assertEqual(len(doc2.detections), len(doc1.detections))
         self.assertEqual(
-            len(doc2.annotations["processing_info"]),
-            len(doc1.annotations["processing_info"]),
+            len(doc2.annotations["time_vs_magnitude"]),
+            len(doc1.annotations["time_vs_magnitude"]),
         )
         # Ensure a known detection appears once
         ids = [d.event_id for d in doc2.detections]

@@ -12,7 +12,7 @@ from eewpw_parser.sinks import BaseSink
 class VSParser:
     def __init__(self, cfg: Dict[str, Any]):
         self.cfg = cfg
-        self.dialect = cfg.get("dialect", "scvs")
+        self.dialect = cfg.get("dialect", "scvsmag")
         self.verbose = bool(cfg.get("verbose", False))
         self.verbose = bool(cfg.get("verbose", False))
 
@@ -54,7 +54,7 @@ class VSParser:
                 for det in d:
                     sink.emit_detection(det)
                 for ann in a:
-                    sink.emit_annotation("processing_info", ann)
+                    sink.emit_annotation("time_vs_magnitude", ann)
 
         pre_det = len(dets_all)
         pre_ann = len(ann_all)
@@ -108,7 +108,7 @@ class VSParser:
             sink.finalize(meta)
             doc = None
         else:
-            doc = FinalDoc(meta=meta, annotations={"processing_info": ann_all}, detections=dets_all)
+            doc = FinalDoc(meta=meta, annotations={"time_vs_magnitude": ann_all}, detections=dets_all)
         if self.verbose:
             print("---- Summary ----")
             print(

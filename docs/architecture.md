@@ -31,7 +31,14 @@ This repository provides deterministic parsers for EEWPW algorithm logs. Parsers
 - `JsonlStreamSink` is intended for streaming/tailing scenarios to emit JSONL records incrementally.
 - Future parser orchestrators will push detections/annotations/meta into these sinks to decouple parsing from output handling.
 - CLI supports `--mode batch` (default) to emit a single JSON file or `--mode stream-jsonl` to emit JSONL lines (`record_type`, `algo`, `dialect`, `instance`, `payload`) via `JsonlStreamSink`. An optional `--instance` sets the instance id (default `<algo>@unknown`).
-- Replay CLI (`eewpw-replay-log`) replays logs to JSONL using sinks; timing is gated by a speed factor and meta.extras carries a replay note.
+- Replay CLI (`eewpw-replay-log`) is a pure playback helper that copies raw lines into `./tmp/fake_<basename>.log` with optional timing sleeps; it does not invoke parsers, sinks, or schemas.
+
+### Live raw storage
+
+- Live mode uses `DailyAlgoWriter` to append envelopes into `data_root/live/raw/<algo>/<YYYY-MM-DD>_<algo>.jsonl` instead of per-event files.
+- Envelopes carry `record_type`, `algo`, `dialect`, `instance`, `event_id`, `timestamp`, `payload`, and optional `profile` for annotations; a `meta` record is appended during shutdown.
+- `live_cli` resolves `data_root` from `--data-root` (preferred), falls back to `--output-dir`, else uses config/env via `get_data_root`.
+- Retention is handled externally via `scripts/cleanup_live_raw.py` (default keep today + yesterday).
 
 ### Sink details and JSONL envelope
 

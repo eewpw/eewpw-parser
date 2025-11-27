@@ -59,7 +59,7 @@ Target log style: `scvsmag-processing-info.log` under `test-data/parser_train_da
 - Dialect class: `VSDialect` in `src/eewpw_parser/parsers/vs/dialects.py`.
 - Streaming state: `VSStreamState` keeps file-level timestamps, version counters, and the active `VSEventState`.
 - Event parsing logic:
-  - `feed_line` normalizes the prefix timestamp, records annotations using `configs/profiles/vs_processing_info.json`, and updates file start/end times.
+  - `feed_line` normalizes the prefix timestamp, records annotations using `configs/profiles/vs_time_vs_mag.json`, and updates file start/end times.
   - `Start logging for event` flushes any in-flight block and creates a new `VSEventState`; `End logging` finalizes it into a `Detection`.
   - Sensor blocks are accumulated into `VSEventState.stations` with PGA(H)/PGA(Z) where present; `nan` and `-1` sentinels are ignored.
   - VS-mag, creation/origin times, and likelihood are captured from their dedicated lines; timestamps are normalized via `to_iso_utc_z`.

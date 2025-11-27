@@ -1,8 +1,10 @@
 # -*- coding: utf-8 -*-
 import json
-from typing import Dict, Any
+import os
+from typing import Dict, Any, Optional
 from pathlib import Path
 from functools import lru_cache
+
 
 def load_config(algo_cfg_path: str = "configs/finder.json") -> Dict[str, Any]:
     """
@@ -49,3 +51,35 @@ def load_profile(relative_path: str) -> dict:
             return json.load(f)
     except (FileNotFoundError, json.JSONDecodeError):
         return {}
+
+
+def get_data_root(cfg: Optional[dict]) -> Path:
+    """
+    Resolve the data root used for live outputs.
+    Priority:
+    1) EEWPW_DATA_ROOT environment variable
+    2) cfg["live"]["data_root"] if present
+    3) ./data under current working directory
+    """
+    env_root = os.environ.get("EEWPW_DATA_ROOT")
+    if env_root:
+        return Path(env_root)
+    live_cfg = (cfg or {}).get("live", {}) if isinstance(cfg, dict) else {}
+    data_root = live_cfg.get("data_root")
+    if data_root:
+        return Path(data_root)
+    return Path.cwd() / "data"
+
+
+def get_live_raw_dir(data_root: Path, algo: str) -> Path:
+    """
+    Directory where live raw JSONL files for a given algo are stored.
+    """
+    return data_root / "live" / "raw" / algo
+
+
+def get_live_daily_jsonl_path(data_root: Path, algo: str, date_str: str) -> Path:
+    """
+    Daily file path for the given algo and date (YYYY-MM-DD).
+    """
+    return get_live_raw_dir(data_root, algo) / f"{date_str}_{algo}.jsonl"

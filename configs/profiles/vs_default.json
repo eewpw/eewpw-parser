@@ -1,9 +1,0 @@
-{
-  "algorithm": "vs",
-  "dialect": "native_vs",
-  "patterns": {
-    "timestamp_regex": "(\\d{4}[-/]\\d{2}[-/]\\d{2} \\d{2}:\\d{2}:\\d{2})",
-    "alert": "VS\\s+ALERT",
-    "update": "VS\\s+UPDATE"
-  }
-}
