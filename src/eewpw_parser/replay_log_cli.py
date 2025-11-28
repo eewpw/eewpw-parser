@@ -2,7 +2,7 @@ import argparse
 import sys
 import time
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Optional, Iterable, List
 from dateutil import parser as dtp
@@ -21,6 +21,19 @@ P_INLINE = re.compile(
     r"(?:[.:]\d{1,6})?"
     r")"
 )
+
+
+def rewrite_timestamp_in_line(line: str, new_ts: datetime) -> str:
+    ts_str = new_ts.strftime("%Y-%m-%d %H:%M:%S.%f")
+    m_prefix = P_PREFIX.match(line)
+    if m_prefix:
+        start, end = m_prefix.span(1)
+        return line[:start] + ts_str + line[end:]
+    m_inline = P_INLINE.search(line)
+    if m_inline:
+        start, end = m_inline.span(1)
+        return line[:start] + ts_str + line[end:]
+    return line
 
 
 def extract_timestamp(line: str) -> Optional[datetime]:
@@ -116,40 +129,75 @@ def playback_file(
     dst_path: Path,
     global_min_ts: Optional[datetime],
     speed: float,
+    repeat: int = 1,
 ) -> None:
     """Replay a single file into its fake target with timing based on extracted timestamps."""
-    # First, count total number of lines for progress reporting.
     try:
-        with src_path.open("r", encoding="utf-8", errors="ignore") as f_count:
-            total_lines = sum(1 for _ in f_count)
+        entries: List[tuple[str, Optional[datetime]]] = []
+        earliest_ts: Optional[datetime] = None
+        latest_ts: Optional[datetime] = None
+        with src_path.open("r", encoding="utf-8", errors="ignore") as f_in:
+            for line in f_in:
+                ts = extract_timestamp(line)
+                entries.append((line, ts))
+                if ts is not None:
+                    if earliest_ts is None or ts < earliest_ts:
+                        earliest_ts = ts
+                    if latest_ts is None or ts > latest_ts:
+                        latest_ts = ts
+        total_lines = len(entries)
     except Exception:
+        entries = []
         total_lines = None
 
-    prev_ts = None
+    if earliest_ts is not None and latest_ts is not None and latest_ts > earliest_ts:
+        per_cycle_offset_seconds = (latest_ts - earliest_ts).total_seconds()
+    elif earliest_ts is not None or latest_ts is not None:
+        per_cycle_offset_seconds = 60.0
+    else:
+        per_cycle_offset_seconds = None
+
+    total_expected = total_lines * max(1, repeat) if total_lines is not None else None
+
+    prev_ts: Optional[datetime] = None
     processed = 0
 
-    with src_path.open("r", encoding="utf-8", errors="ignore") as f_in, dst_path.open(
-        "a", encoding="utf-8"
-    ) as f_out:
-        for line in f_in:
-            curr_ts = extract_timestamp(line)
-            sleep_secs = compute_sleep_seconds(prev_ts, curr_ts, global_min_ts, speed)
+    with dst_path.open("a", encoding="utf-8") as f_out:
+        for rep in range(max(1, repeat)):
+            for original_line, original_ts in entries:
+                if original_ts is not None and per_cycle_offset_seconds is not None:
+                    offset_seconds = per_cycle_offset_seconds * rep
+                    new_ts = original_ts + timedelta(seconds=offset_seconds)
+                else:
+                    new_ts = original_ts
 
-            processed += 1
-            if total_lines is not None and total_lines > 0:
-                msg = f"[replay:{src_path.name}] {processed}/{total_lines} lines (next in {sleep_secs:.3f}s)"
-            else:
-                msg = f"[replay:{src_path.name}] {processed} lines (next in {sleep_secs:.3f}s)"
-            print("\r" + msg, end="", flush=True)
+                if new_ts is not None:
+                    sleep_secs = compute_sleep_seconds(prev_ts, new_ts, global_min_ts, speed)
+                else:
+                    sleep_secs = compute_sleep_seconds(prev_ts, prev_ts, global_min_ts, speed)
 
-            if sleep_secs > 0:
-                time.sleep(sleep_secs)
+                processed += 1
+                if total_expected is not None and total_expected > 0:
+                    msg = f"[replay:{src_path.name}] {processed}/{total_expected} lines (next in {sleep_secs:.3f}s)"
+                else:
+                    msg = f"[replay:{src_path.name}] {processed} lines (next in {sleep_secs:.3f}s)"
+                print("\r" + msg, end="", flush=True)
 
-            f_out.write(line)
-            f_out.flush()
+                if sleep_secs > 0:
+                    time.sleep(sleep_secs)
 
-            if curr_ts is not None:
-                prev_ts = curr_ts
+                if new_ts is not None:
+                    line_to_write = rewrite_timestamp_in_line(original_line, new_ts)
+                else:
+                    line_to_write = original_line
+
+                f_out.write(line_to_write)
+                f_out.flush()
+
+                if new_ts is not None:
+                    prev_ts = new_ts
+                elif original_ts is not None:
+                    prev_ts = original_ts
 
     print()
 
@@ -164,6 +212,7 @@ def parse_args() -> argparse.Namespace:
         help="Path to a file containing log paths (one per line, # comments allowed)",
     )
     ap.add_argument("-v", "--verbose", action="store_true", help="Enable verbose replay output")
+    ap.add_argument("--repeat", type=int, default=1, help="Repeat each input log N times in the fake output (timestamps adjusted when possible)")
     ap.add_argument("inputs", nargs="*", help="Log files to replay sequentially")
     return ap.parse_args()
 
@@ -260,7 +309,7 @@ def main() -> int:
 
         for src_path in sorted_paths:
             dst_path = ensure_tmp_and_target(src_path)
-            playback_file(src_path, dst_path, global_min_ts, args.speed)
+            playback_file(src_path, dst_path, global_min_ts, args.speed, repeat=args.repeat)
             if args.verbose:
                 print(f"[replay] finished {src_path.name} -> {dst_path}", flush=True)
 

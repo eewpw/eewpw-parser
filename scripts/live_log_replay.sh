@@ -14,6 +14,7 @@ LIVE_OUTPUT_DIR="./tmp/live_output"
 GRACE_SECONDS=2
 CLEANUP_ON_SUCCESS=true
 VERBOSE=0
+REPEAT_COUNT=1      # Tells the replay tool how many times to repeat the logs
 
 # === internal helpers ===
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -115,7 +116,7 @@ for entry in "${LOGS[@]}"; do
 done
 
 # Run replay over originals into fake logs
-replay_cmd=(eewpw-replay-log --speed "${REPLAY_SPEED}")
+replay_cmd=(eewpw-replay-log --speed "${REPLAY_SPEED}" --repeat "${REPEAT_COUNT}")
 if [[ ${VERBOSE} -eq 1 ]]; then
   replay_cmd+=(--verbose)
 fi

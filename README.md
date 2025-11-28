@@ -46,6 +46,11 @@ eewpw-replay-log --speed 10.0 /path/to/A.log /path/to/B.log
 ```
 
 ```bash
+eewpw-replay-log --speed 10.0 --repeat 3 /path/to/A.log /path/to/B.log
+# Same as the example above, but repeats the same replay three times.
+```
+
+```bash
 eewpw-replay-log --file-list ./logs.txt --speed 5
 # logs.txt contains one path per line; ignores empty lines and comments beginning with #.
 ```
