@@ -2,7 +2,7 @@
 import argparse
 from pathlib import Path
 
-from eewpw_parser.config import load_config, get_data_root
+from eewpw_parser.config import load_config, get_data_root, config_filename_for_algo
 from eewpw_parser.config_loader import set_config_root_override
 from eewpw_parser.sources import TailLineSource
 from eewpw_parser.live_engine import LiveEngine
@@ -29,7 +29,7 @@ def main():
     if args.config_root is not None:
         set_config_root_override(args.config_root)
 
-    cfg_path = "finder.json" if args.algo == "finder" else "vs.json"
+    cfg_path = config_filename_for_algo(args.algo)
     cfg = load_config(cfg_path)
     if args.dialect:
         cfg["dialect"] = args.dialect

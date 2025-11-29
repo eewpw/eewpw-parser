@@ -6,6 +6,18 @@ from functools import lru_cache
 from pathlib import Path
 
 from eewpw_parser.config_loader import open_config_json
+ALGO_CONFIG_MAP = {
+    "finder": "finder.json",
+    "vs": "vs.json",
+}
+
+
+def config_filename_for_algo(algo: str) -> str:
+    try:
+        return ALGO_CONFIG_MAP[algo]
+    except KeyError:
+        supported = ", ".join(sorted(ALGO_CONFIG_MAP))
+        raise ValueError(f"Unsupported algo '{algo}'. Supported: {supported}")
 
 
 def load_config(algo_cfg_path: str = "finder.json") -> Dict[str, Any]:
