@@ -4,15 +4,20 @@ import os
 from typing import Dict, Any, Optional
 from functools import lru_cache
 from pathlib import Path
-
 from eewpw_parser.config_loader import open_config_json
+
+# -----------------------------------------------------------------------------
+# Canonical filenames for known algorithms. Used to map algo names to config files.
+# Add new algorithms here as needed - no base path is included, only filenames.
 ALGO_CONFIG_MAP = {
     "finder": "finder.json",
     "vs": "vs.json",
 }
+# -----------------------------------------------------------------------------
 
 
 def config_filename_for_algo(algo: str) -> str:
+    # Keep algo selection strict so typos fail fast.
     try:
         return ALGO_CONFIG_MAP[algo]
     except KeyError:
