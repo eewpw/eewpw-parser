@@ -23,16 +23,66 @@ P_INLINE = re.compile(
 )
 
 
+
+def format_timestamp_like(original: str, new_ts: datetime) -> str:
+    """
+    Format new_ts using the same structural format as the original timestamp string.
+
+    We preserve:
+    - date separator: '-' vs '/'
+    - separator between date and time: ' ', 'T', or ','
+    - presence and length of fractional seconds
+    - fractional separator: '.' vs ':'
+    """
+    m = re.match(
+        r"(?P<date>\d{4}[/-]\d{2}[/-]\d{2})"
+        r"(?P<dtsep>[ T,])"
+        r"(?P<hms>\d{2}:\d{2}:\d{2})"
+        r"(?:(?P<fracsep>[.:])(?P<frac>\d{1,6}))?",
+        original,
+    )
+    if not m:
+        # Fallback: keep current generic formatting if we cannot parse the pattern
+        return new_ts.strftime("%Y-%m-%d %H:%M:%S.%f")
+
+    date_str = m.group("date")
+    dtsep = m.group("dtsep")
+    fracsep = m.group("fracsep")
+    frac = m.group("frac")
+
+    # Determine date separator from the original (position 4 is safe for YYYY?MM?DD)
+    date_sep = date_str[4] if len(date_str) >= 5 else "-"
+
+    # Build date and time with appropriate separators
+    date_out = f"{new_ts.year:04d}{date_sep}{new_ts.month:02d}{date_sep}{new_ts.day:02d}"
+    time_out = f"{new_ts.hour:02d}:{new_ts.minute:02d}:{new_ts.second:02d}"
+
+    if frac is not None and fracsep is not None:
+        frac_len = len(frac)
+        micro_str = f"{new_ts.microsecond:06d}"
+        frac_out = micro_str[:frac_len]
+        return f"{date_out}{dtsep}{time_out}{fracsep}{frac_out}"
+
+    return f"{date_out}{dtsep}{time_out}"
+
 def rewrite_timestamp_in_line(line: str, new_ts: datetime) -> str:
-    ts_str = new_ts.strftime("%Y-%m-%d %H:%M:%S.%f")
+    # Try prefix-style timestamps first
     m_prefix = P_PREFIX.match(line)
     if m_prefix:
+        original_ts = m_prefix.group(1)
+        ts_str = format_timestamp_like(original_ts, new_ts)
         start, end = m_prefix.span(1)
         return line[:start] + ts_str + line[end:]
+
+    # Then try inline-style timestamps
     m_inline = P_INLINE.search(line)
     if m_inline:
+        original_ts = m_inline.group(1)
+        ts_str = format_timestamp_like(original_ts, new_ts)
         start, end = m_inline.span(1)
         return line[:start] + ts_str + line[end:]
+
+    # If we can't find a recognizable timestamp, leave the line unchanged
     return line
 
 
