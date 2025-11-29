@@ -61,10 +61,27 @@ cat paths.txt | eewpw-replay-log --speed 2
 ```
 
 Notes:
-- Playback begins “now”; relative deltas between consecutive timestamps determine sleeps.
+- In original mode, the sleep baseline is the earliest timestamp across all inputs. In realtime mode (rebased), the earliest original timestamp is mapped to current UTC time at replay start.
 - Sleep = delta_seconds / speed. If speed <= 0, treat as 1; if speed < 0.001, clamp to 0.001.
 - If a line has no timestamp, reuse the previous line’s timestamp; if the first line has no timestamp, write without sleeping.
 - Always writes to `./tmp`; never writes next to the input logs.
+
+### Time Mode
+
+The replay CLI supports `--time-mode {original,realtime}` (default `original`).
+
+- `original`: use timestamps as found in logs; sleep deltas relative to earliest original timestamp.
+- `realtime`: rebase earliest timestamp to now (UTC); preserve relative intervals and repeat cycle offsets.
+- Rebasing formula: `t_new = T0_sim + (t_orig - T0_orig) + cycle_offset` where `T0_sim = datetime.now(UTC)` at start.
+- With `--repeat N`, each cycle is offset by the file’s span (latest - earliest) after rebasing.
+
+```bash
+eewpw-replay-log --time-mode original --speed 5 path/to/scfinder.log
+eewpw-replay-log --time-mode realtime --speed 5 path/to/scfinder.log
+eewpw-replay-log --time-mode realtime --repeat 2 path/to/vs.log
+```
+
+Use realtime mode to simulate historical logs as if they were emitted today so downstream live daily merging triggers.
 
 ## Live CLI
 

@@ -31,7 +31,7 @@ This repository provides deterministic parsers for EEWPW algorithm logs. Parsers
 - `JsonlStreamSink` is intended for streaming/tailing scenarios to emit JSONL records incrementally.
 - Future parser orchestrators will push detections/annotations/meta into these sinks to decouple parsing from output handling.
 - CLI supports `--mode batch` (default) to emit a single JSON file or `--mode stream-jsonl` to emit JSONL lines (`record_type`, `algo`, `dialect`, `instance`, `payload`) via `JsonlStreamSink`. An optional `--instance` sets the instance id (default `<algo>@unknown`).
-- Replay CLI (`eewpw-replay-log`) is a pure playback helper that copies raw lines into `./tmp/fake_<basename>.log` with optional timing sleeps; it does not invoke parsers, sinks, or schemas.
+- Replay CLI (`eewpw-replay-log`) is a pure playback helper that copies raw lines into `./tmp/fake_<basename>.log` with optional timing sleeps; it does not invoke parsers, sinks, or schemas. It supports `--time-mode {original,realtime}`; in realtime mode the earliest original timestamp is mapped to current UTC (`T0_sim`) and each line's new timestamp is `T0_sim + (t_orig - T0_orig) + cycle_offset` preserving relative intervals and repeat cycles.
 
 ### Live raw storage
 

@@ -177,7 +177,8 @@ def ensure_tmp_and_target(src_path: Path) -> Path:
 def playback_file(
     src_path: Path,
     dst_path: Path,
-    global_min_ts: Optional[datetime],
+    original_global_min_ts: Optional[datetime],
+    baseline_ts: Optional[datetime],
     speed: float,
     repeat: int = 1,
 ) -> None:
@@ -215,16 +216,19 @@ def playback_file(
     with dst_path.open("a", encoding="utf-8") as f_out:
         for rep in range(max(1, repeat)):
             for original_line, original_ts in entries:
-                if original_ts is not None and per_cycle_offset_seconds is not None:
-                    offset_seconds = per_cycle_offset_seconds * rep
-                    new_ts = original_ts + timedelta(seconds=offset_seconds)
+                cycle_offset = (per_cycle_offset_seconds or 0.0) * rep
+                if original_ts is not None and baseline_ts is not None and original_global_min_ts is not None:
+                    rel_from_global = (original_ts - original_global_min_ts).total_seconds()
+                    new_ts = baseline_ts + timedelta(seconds=rel_from_global + cycle_offset)
+                elif original_ts is not None and per_cycle_offset_seconds is not None:
+                    new_ts = original_ts + timedelta(seconds=cycle_offset)
                 else:
                     new_ts = original_ts
 
                 if new_ts is not None:
-                    sleep_secs = compute_sleep_seconds(prev_ts, new_ts, global_min_ts, speed)
+                    sleep_secs = compute_sleep_seconds(prev_ts, new_ts, baseline_ts, speed)
                 else:
-                    sleep_secs = compute_sleep_seconds(prev_ts, prev_ts, global_min_ts, speed)
+                    sleep_secs = compute_sleep_seconds(prev_ts, prev_ts, baseline_ts, speed)
 
                 processed += 1
                 if total_expected is not None and total_expected > 0:
@@ -255,6 +259,12 @@ def playback_file(
 def parse_args() -> argparse.Namespace:
     ap = argparse.ArgumentParser(description="EEWPW raw log replay (writes fake logs under ./tmp)")
     ap.add_argument("--speed", type=float, default=1.0, help="Replay speed factor (<=0 disables sleeping)")
+    ap.add_argument(
+        "--time-mode",
+        choices=["original", "realtime"],
+        default="original",
+        help="Timestamp handling: 'original' uses log timestamps as-is; 'realtime' rebases the earliest timestamp to now (UTC) while preserving relative timing and repeat cycle spacing.",
+    )
     ap.add_argument(
         "--file-list",
         dest="file_list",
@@ -342,6 +352,13 @@ def main() -> int:
         earliest_list = [find_earliest_timestamp_for_file(p) for p in paths]
         global_min_ts_candidates = [ts for ts in earliest_list if ts is not None]
         global_min_ts = min(global_min_ts_candidates) if global_min_ts_candidates else None
+        original_global_min_ts = global_min_ts
+
+        # In 'realtime' mode, the earliest timestamp across all inputs is mapped to datetime.now(UTC) and all other timestamps are adjusted by the same offset, preserving relative timing and repeat cycles. Used to simulate replayed logs as if they were happening today for live backend testing.
+        if args.time_mode == "original":
+            baseline_ts = original_global_min_ts
+        else:
+            baseline_ts = datetime.now(timezone.utc)
 
         # Sort files: those with timestamps ordered by earliest ts; those without timestamps retain relative order at end.
         sorted_paths = list(paths)
@@ -359,7 +376,7 @@ def main() -> int:
 
         for src_path in sorted_paths:
             dst_path = ensure_tmp_and_target(src_path)
-            playback_file(src_path, dst_path, global_min_ts, args.speed, repeat=args.repeat)
+            playback_file(src_path, dst_path, original_global_min_ts, baseline_ts, args.speed, repeat=args.repeat)
             if args.verbose:
                 print(f"[replay] finished {src_path.name} -> {dst_path}", flush=True)
 
