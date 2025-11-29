@@ -1,6 +1,8 @@
 import json
 import argparse
+from pathlib import Path
 from eewpw_parser.config import load_config
+from eewpw_parser.config_loader import set_config_root_override
 from eewpw_parser.parsers.finder.finder_parser import FinderParser
 from eewpw_parser.parsers.vs.vs_parser import VSParser
 from eewpw_parser.schemas import FinalDoc
@@ -9,6 +11,7 @@ def main():
     ap = argparse.ArgumentParser(description="EEWPW deterministic parser")
     ap.add_argument("--algo", required=True, choices=["finder", "vs"], help="Algorithm to parse")
     ap.add_argument("--dialect", default=None, help="Dialect (e.g., scfinder)")
+    ap.add_argument("--config-root", type=Path, default=None, help="Optional override for configs root")
     ap.add_argument("-v", "--verbose", action="store_true", help="Enable verbose console output")
     ap.add_argument(
         "--mode",
@@ -25,7 +28,10 @@ def main():
     ap.add_argument("inputs", nargs="+", help="One or more input log files (top-level only)")
     args = ap.parse_args()
 
-    cfg_path = "configs/finder.json" if args.algo == "finder" else "configs/vs.json"
+    if args.config_root is not None:
+        set_config_root_override(args.config_root)
+
+    cfg_path = "finder.json" if args.algo == "finder" else "vs.json"
     cfg = load_config(cfg_path)
     if args.dialect:
         cfg["dialect"] = args.dialect
@@ -52,7 +58,6 @@ def main():
             json.dump(doc.dict(), f, indent=indent if pretty else None, ensure_ascii=ensure_ascii)
         print(f"Wrote {args.output}")
     elif args.mode == "stream-jsonl":
-        from pathlib import Path
         from eewpw_parser.sinks import JsonlStreamSink
 
         out_path = Path(args.output)

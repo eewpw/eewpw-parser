@@ -6,6 +6,7 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Optional, Iterable, List
 from dateutil import parser as dtp
+from eewpw_parser.config_loader import set_config_root_override
 
 
 P_PREFIX = re.compile(
@@ -259,6 +260,7 @@ def playback_file(
 def parse_args() -> argparse.Namespace:
     ap = argparse.ArgumentParser(description="EEWPW raw log replay (writes fake logs under ./tmp)")
     ap.add_argument("--speed", type=float, default=1.0, help="Replay speed factor (<=0 disables sleeping)")
+    ap.add_argument("--config-root", type=Path, default=None, help="Optional override for configs root")
     ap.add_argument(
         "--time-mode",
         choices=["original", "realtime"],
@@ -347,6 +349,8 @@ def find_earliest_ts(path: Path) -> Optional[float]:
 def main() -> int:
     try:
         args = parse_args()
+        if args.config_root is not None:
+            set_config_root_override(args.config_root)
         paths = collect_input_paths(args.inputs, args.file_list)
 
         earliest_list = [find_earliest_timestamp_for_file(p) for p in paths]

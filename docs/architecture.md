@@ -3,7 +3,7 @@
 This repository provides deterministic parsers for EEWPW algorithm logs. Parsers share a small set of utilities and schemas under `src/eewpw_parser` and expose a CLI via `eewpw_parser.cli`.
 
 - `schemas.py` contains the Pydantic models used for detections (`Detection`, `DetectionCore`, `FaultVertex`, `GMObs`), annotations, and the `Meta`/`FinalDoc` envelope.
-- `config.py` loads global and algorithm-specific JSON config plus reusable profile snippets (e.g., regex-driven annotation profiles).
+- `config.py` loads global and algorithm-specific JSON config plus reusable profile snippets (e.g., regex-driven annotation profiles). Config root precedence: CLI `--config-root` > `EEWPW_PARSER_CONFIG_ROOT` > repo `configs/` > packaged defaults under `eewpw_parser/configs/`.
 - `utils.py` provides timestamp normalization helpers (`to_iso_utc_z`, `epoch_to_iso_z`) used by all parsers.
 - `parsers/` holds per-algorithm implementations. Finder and VS are implemented; additional algorithms can plug in using the same patterns.
 - `cli.py` is the entrypoint (`eewpw-parse`) that wires config, selects a parser, and writes a JSON `FinalDoc`.

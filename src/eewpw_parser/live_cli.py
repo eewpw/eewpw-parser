@@ -3,6 +3,7 @@ import argparse
 from pathlib import Path
 
 from eewpw_parser.config import load_config, get_data_root
+from eewpw_parser.config_loader import set_config_root_override
 from eewpw_parser.sources import TailLineSource
 from eewpw_parser.live_engine import LiveEngine
 from eewpw_parser.parsers.finder.finder_parser import FinderParser
@@ -20,11 +21,15 @@ def main():
         "--data-root",
         help="Root directory for live raw outputs (preferred; overrides --output-dir if both provided)",
     )
+    ap.add_argument("--config-root", type=Path, default=None, help="Optional override for configs root")
     ap.add_argument("--verbose", action="store_true", help="Enable verbose output")
     ap.add_argument("--poll-interval", type=float, default=0.1, help="Polling interval for tailing in seconds")
     args = ap.parse_args()
 
-    cfg_path = "configs/finder.json" if args.algo == "finder" else "configs/vs.json"
+    if args.config_root is not None:
+        set_config_root_override(args.config_root)
+
+    cfg_path = "finder.json" if args.algo == "finder" else "vs.json"
     cfg = load_config(cfg_path)
     if args.dialect:
         cfg["dialect"] = args.dialect

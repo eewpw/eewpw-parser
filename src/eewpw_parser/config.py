@@ -2,21 +2,18 @@
 import json
 import os
 from typing import Dict, Any, Optional
-from pathlib import Path
 from functools import lru_cache
+from pathlib import Path
+
+from eewpw_parser.config_loader import open_config_json
 
 
-def load_config(algo_cfg_path: str = "configs/finder.json") -> Dict[str, Any]:
+def load_config(algo_cfg_path: str = "finder.json") -> Dict[str, Any]:
     """
     Load and merge global and algorithm-specific configuration files.
     configs/global.json is loaded first, then algo_cfg_path is loaded and merged on top.
     These configurations are used to guide the parsing process in the dialect parsers.
     """
-    base_dir = Path(__file__).resolve().parents[2]
-    global_path = base_dir / "configs" / "global.json"
-    algo_path = Path(algo_cfg_path)
-    if not algo_path.is_absolute():
-        algo_path = base_dir / algo_cfg_path
 
     def _deep_merge(a: Dict[str, Any], b: Dict[str, Any]) -> Dict[str, Any]:
         out = dict(a)
@@ -27,28 +24,26 @@ def load_config(algo_cfg_path: str = "configs/finder.json") -> Dict[str, Any]:
                 out[k] = v
         return out
 
-
-    with global_path.open("r", encoding="utf-8") as f:
-        g = json.load(f)
-    with algo_path.open("r", encoding="utf-8") as f:
-        a = json.load(f)
+    g = open_config_json("global.json")
+    a = open_config_json(algo_cfg_path)
     return _deep_merge(g, a)
 
 
 @lru_cache(maxsize=None)
 def load_profile(relative_path: str) -> dict:
     """
-    Load a profile JSON from the repo-level configs directory.
+    Load a profile JSON from the configured configs root.
 
     Example:
         load_profile("profiles/finder_time_vs_mag.json")
+        load_profile("finder_time_vs_mag.json")  # profile paths are resolved under profiles/
     """
-    here = Path(__file__).resolve()
-    profile_path = here.parents[2] / "configs" / relative_path
+    rel_path = relative_path
+    if not rel_path.startswith("profiles/"):
+        rel_path = f"profiles/{rel_path}"
 
     try:
-        with profile_path.open("r", encoding="utf-8") as f:
-            return json.load(f)
+        return open_config_json(rel_path)
     except (FileNotFoundError, json.JSONDecodeError):
         return {}
 

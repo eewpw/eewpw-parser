@@ -1,0 +1,19 @@
+{
+  "output": {
+    "pretty": true,
+    "indent": 2,
+    "ensure_ascii": false
+  },
+  "annotations": {
+    "profiles": [
+      "configs/profiles/finder_time_vs_mag.json"
+    ]
+  },
+  "playback": {
+    "extract_playback_time": true
+  },
+  "live": {
+    "data_root": null,
+    "retention_days": 2
+  }
+}
