@@ -29,6 +29,8 @@ class FinderStreamState:
     partial_line: str = ""
     recent_lines: deque = field(default_factory=lambda: deque(maxlen=FINDER_RECENT_LINES_MAX))
     absolute_line_counter: int = 0
+    last_detection_index: Optional[int] = None
+    last_detection_event_id: Optional[str] = None
 
 
 class FinderBaseDialect:
@@ -323,6 +325,9 @@ class FinderBaseDialect:
             next_event_idx: Optional[int] = None
             while j < len(lines):
                 s = lines[j]
+
+                if self.P_STATION_HEADER.search(s):
+                    break
 
                 if self.P_EVENT_ID.search(s):
                     next_event_idx = j
@@ -765,7 +770,246 @@ class NativeFinderDialect(FinderBaseDialect):
     # No START_PLAYBACK_RE, or a different one, e.g. line that marks "Finder started"
     START_PLAYBACK_RE = None
 
-    PROFILE_NAME: str = "profiles/finder_native_time_vs_mag.json"  
+    PROFILE_NAME: str = "profiles/finder_time_vs_mag.json"  
+
+    def _parse_detections_stream(
+        self,
+        lines: List[str],
+        state: FinderStreamState,
+        finalize: bool = False,
+    ) -> Tuple[List[Detection], int]:
+        dets: List[Detection] = []
+        i = 0
+        pending_station_list = state.pending_station_list
+        version_by_event = state.version_by_event
+        last_detection_index = state.last_detection_index
+        last_detection_event_id = state.last_detection_event_id
+
+        def attach_to_last(stations: List[tuple]) -> bool:
+            nonlocal dets, last_detection_index
+            if last_detection_index is None:
+                return False
+            if last_detection_index < 0 or last_detection_index >= len(dets):
+                return False
+            det = dets[last_detection_index]
+            gm_info = det.gm_info or {"pgv_obs": [], "pga_obs": []}
+            pga_list = gm_info.setdefault("pga_obs", [])
+            for lat, lon, sncl, t_epoch, pga in stations:
+                pga_list.append(
+                    GMObs(
+                        orig_sys="finder",
+                        SNCL=str(sncl),
+                        value=str(pga),
+                        lat=str(lat),
+                        lon=str(lon),
+                        time=epoch_to_iso_z(str(t_epoch)),
+                    )
+                )
+            gm_info.setdefault("pgv_obs", [])
+            det.gm_info = gm_info
+            return True
+
+        while i < len(lines):
+            line = lines[i]
+
+            if self.P_STATION_HEADER.search(line):
+                j = i + 1
+                stations = []
+                while j < len(lines):
+                    mrow = self.P_STATION_ROW.findall(lines[j])
+                    if not mrow:
+                        break
+                    for match in mrow:
+                        sta, lat, lon, pga, t_epoch, include = (
+                            match[0],
+                            match[1],
+                            match[2],
+                            match[3],
+                            match[4],
+                            match[5],
+                        )
+                        if int(include) == 1:
+                            stations.append(
+                                (
+                                    float(lat),
+                                    float(lon),
+                                    trim(sta),
+                                    float(t_epoch),
+                                    float(pga),
+                                )
+                            )
+                    j += 1
+
+                block_event_id = None
+                for k in range(i, min(j, len(lines))):
+                    m_block = self.P_EVENT_ID.search(lines[k])
+                    if m_block:
+                        block_event_id = m_block.group(1)
+                        break
+
+                attached = False
+                if last_detection_index is not None and (
+                    block_event_id is None or block_event_id == last_detection_event_id
+                ):
+                    attached = attach_to_last(stations)
+
+                if attached:
+                    pending_station_list = None
+                else:
+                    pending_station_list = stations
+
+                i = j
+                continue
+
+            m_eid = self.P_EVENT_ID.search(line)
+            if not m_eid:
+                i += 1
+                continue
+
+            event_id = m_eid.group(1)
+
+            get_mag = get_lat = get_lon = get_dep = get_lik = get_otm = None
+            rupture_list: List[FaultVertex] = []
+            emission_ts_iso: Optional[str] = None
+
+            j = i + 1
+            next_event_idx: Optional[int] = None
+            while j < len(lines):
+                s = lines[j]
+
+                if self.P_STATION_HEADER.search(s):
+                    break
+
+                if self.P_EVENT_ID.search(s):
+                    next_event_idx = j
+                    break
+
+                if not emission_ts_iso:
+                    mp = self.P_PREFIX_TS.search(s)
+                    if mp:
+                        emission_ts_iso = to_iso_utc_z(mp.group(1))
+
+                if (m := self.P_GET_MAG.search(s)):
+                    get_mag = float(m.group(1))
+                if (m := self.P_GET_LAT.search(s)):
+                    get_lat = float(m.group(1))
+                if (m := self.P_GET_LON.search(s)):
+                    get_lon = float(m.group(1))
+                if (m := self.P_GET_DEP.search(s)):
+                    get_dep = float(m.group(1))
+                if (m := self.P_GET_LIK.search(s)):
+                    get_lik = float(m.group(1))
+                if (m := self.P_GET_OTM.search(s)):
+                    get_otm = m.group(1)
+
+                if (m := self.P_GET_RUP.search(s)):
+                    coords = self.P_RUP_PT.findall(m.group(1))
+                    if coords:
+                        rupture_list.extend(
+                            [
+                                FaultVertex(
+                                    lat=float(a),
+                                    lon=float(b),
+                                    depth=float(c),
+                                )
+                                for a, b, c in coords
+                            ]
+                        )
+                        k = j + 1
+                        while k < len(lines) and (
+                            next_event_idx is None or k < next_event_idx
+                        ):
+                            mc = self.P_RUP_LINE.match(lines[k])
+                            if not mc:
+                                break
+                            a, b, c = mc.groups()
+                            rupture_list.append(
+                                FaultVertex(
+                                    lat=float(a),
+                                    lon=float(b),
+                                    depth=float(c),
+                                )
+                            )
+                            k += 1
+                        j = k
+                        continue
+                j += 1
+
+            block_end = next_event_idx if next_event_idx is not None else j
+
+            if not finalize and block_end >= len(lines):
+                state.pending_station_list = pending_station_list
+                state.last_detection_index = last_detection_index
+                state.last_detection_event_id = last_detection_event_id
+                return dets, i
+
+            if get_otm is None:
+                core = DetectionCore(
+                    id=str(event_id),
+                    mag=str(get_mag) if get_mag is not None else "0.0",
+                    lat=str(get_lat) if get_lat is not None else "0.0",
+                    lon=str(get_lon) if get_lon is not None else "0.0",
+                    depth=str(get_dep) if get_dep is not None else "0.0",
+                    orig_time=emission_ts_iso
+                    or to_iso_utc_z("1970-01-01T00:00:00Z"),
+                    likelihood=str(get_lik) if get_lik is not None else None,
+                )
+            else:
+                core = DetectionCore(
+                    id=str(event_id),
+                    mag=str(get_mag) if get_mag is not None else "0.0",
+                    lat=str(get_lat) if get_lat is not None else "0.0",
+                    lon=str(get_lon) if get_lon is not None else "0.0",
+                    depth=str(get_dep) if get_dep is not None else "0.0",
+                    orig_time=epoch_to_iso_z(get_otm),
+                    likelihood=str(get_lik) if get_lik is not None else None,
+                )
+
+            timestamp_iso = self._pick_detection_timestamp(
+                block_lines=lines[i:block_end],
+                emission_ts_iso=emission_ts_iso,
+                core_orig_time=core.orig_time,
+            )
+
+            v = version_by_event.get(event_id, 0) + 1
+            version_by_event[event_id] = v
+
+            dets.append(
+                Detection(
+                    timestamp=timestamp_iso,
+                    event_id=str(event_id),
+                    category="live",
+                    instance="finder@unknown",
+                    orig_sys="finder",
+                    version=str(v),
+                    core_info=core,
+                    fault_info=rupture_list,
+                    gm_info={"pgv_obs": [], "pga_obs": []},
+                )
+            )
+
+            last_detection_index = len(dets) - 1
+            last_detection_event_id = str(event_id)
+
+            if pending_station_list:
+                if not attach_to_last(pending_station_list):
+                    # Keep for the next detection in case of mismatch.
+                    pass
+                else:
+                    pending_station_list = None
+
+            i = block_end
+
+        if finalize and pending_station_list and last_detection_index is not None:
+            if last_detection_index < len(dets):
+                attach_to_last(pending_station_list)
+                pending_station_list = None
+
+        state.pending_station_list = pending_station_list
+        state.version_by_event = version_by_event
+        state.last_detection_index = last_detection_index
+        state.last_detection_event_id = last_detection_event_id
+        return dets, len(lines)
 
 
 class NativeFinderLegacyDialect(FinderBaseDialect):

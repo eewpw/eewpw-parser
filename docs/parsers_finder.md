@@ -18,7 +18,7 @@ Finder parsing lives in `src/eewpw_parser/parsers/finder/` and is orchestrated b
 - Detection blocks are anchored by `event_id` lines. The parser scans forward through the block to capture:
   - `get_mag`, `get_epicenter_lat/lon`, `get_depth`, `get_likelihood`, `get_origin_time` (epoch), rupture vertices (`get_rupture_list` + continuation lines).
   - The first prefix timestamp (`P_PREFIX_TS`) in the block is used as the emission time when available.
-  - Stations that exceeded thresholds are parsed from station tables (`P_STATION_HEADER` + `P_STATION_ROW`) and attached as `pga_obs`.
+  - Stations that exceeded thresholds are parsed from station tables (`P_STATION_HEADER` + `P_STATION_ROW`) and attached as `pga_obs`. Native Finder attaches station tables to the most recent detection (logs often emit the table after the summary), while other dialects attach to the next detection.
 - Versioning is tracked per `event_id` to reflect successive updates in the log stream.
 - Dialects can override `_pick_detection_timestamp` to choose wall-clock vs origin/epoch timestamps (used by the legacy native dialect).
 
@@ -31,7 +31,7 @@ Finder parsing lives in `src/eewpw_parser/parsers/finder/` and is orchestrated b
 
 - The parser can operate incrementally over line streams: state tracks the current detection block and pending station list so detections can be emitted when a new `event_id` is encountered or on flush.
 - Timestamp selection always prefers the wall-clock prefix seen so far; otherwise it falls back to origin/epoch values so detections can be emitted even before the block is complete.
-- Station blocks are consumed once and applied to the next detection emission to avoid buffering entire files.
+- Station blocks are consumed once and applied to the next detection emission to avoid buffering entire files. Native Finder instead attaches a station table to the most recent detection, with a pending fallback if the table appears before any detection.
 
 ## Rolling Buffer (Finder)
 
