@@ -22,7 +22,7 @@ class TestVSParser(unittest.TestCase):
         self.assertAlmostEqual(float(first.core_info.mag), 4.83, places=2)
         self.assertTrue(first.timestamp.startswith("2020-10-25T19:35:48"))
         # Ensure GM observations captured
-        self.assertGreaterEqual(len(first.gm_info.get("pga_obs", [])), 1)
+        self.assertGreaterEqual(len(first.gm_info.pga_obs), 1)
         # Median single-station magnitude captured (may be None if absent)
         self.assertTrue(hasattr(first.core_info, "vs_median_single_station_mag"))
 

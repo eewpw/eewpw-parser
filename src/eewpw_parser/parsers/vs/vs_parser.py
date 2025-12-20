@@ -3,7 +3,7 @@ from typing import List, Dict, Any, Optional
 from pathlib import Path
 from dateutil import parser as dtp
 
-from eewpw_parser.schemas import FinalDoc, Meta
+from eewpw_parser.schemas import FinalDoc, Meta, DEFAULT_SCHEMA_VERSION
 from eewpw_parser.parsers.vs.dialects import VSDialect
 from eewpw_parser.dedup import deduplicate_detections, deduplicate_annotations
 from eewpw_parser.sinks import BaseSink
@@ -98,6 +98,7 @@ class VSParser:
         meta = Meta(
             algo="vs",
             dialect=self.dialect,
+            schema_version=DEFAULT_SCHEMA_VERSION,
             started_at=started_at_iso,
             finished_at=finished_at_iso,
             extras=extras,

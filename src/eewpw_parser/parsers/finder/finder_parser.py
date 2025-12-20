@@ -2,7 +2,7 @@
 from typing import List, Dict, Any, Optional
 from pathlib import Path
 from dateutil import parser as dtp
-from eewpw_parser.schemas import FinalDoc, Meta
+from eewpw_parser.schemas import FinalDoc, Meta, DEFAULT_SCHEMA_VERSION
 from eewpw_parser.parsers.finder.dialects import (
     FinderStreamState,
     SCFinderDialect,
@@ -145,6 +145,7 @@ class FinderParser:
         meta = Meta(
             algo="finder",
             dialect=self.dialect,
+            schema_version=DEFAULT_SCHEMA_VERSION,
             started_at=started_at_iso,
             finished_at=finished_at_iso,
             extras=extras,

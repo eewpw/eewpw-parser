@@ -47,7 +47,7 @@ class TestFinderNativeStationBlock(unittest.TestCase):
         self.assertIsNotNone(doc)
         self.assertEqual(len(doc.detections), 1)
         det = doc.detections[0]
-        pga_obs = det.gm_info.get("pga_obs", [])
+        pga_obs = det.gm_info.pga_obs
         self.assertEqual(len(pga_obs), 1)
         obs = pga_obs[0]
         self.assertEqual(obs.SNCL, "SY.TOFB.ENE.--")
@@ -61,7 +61,7 @@ class TestFinderNativeStationBlock(unittest.TestCase):
         self.assertIsNotNone(doc)
         self.assertEqual(len(doc.detections), 1)
         det = doc.detections[0]
-        pga_obs = det.gm_info.get("pga_obs", [])
+        pga_obs = det.gm_info.pga_obs
         self.assertEqual(len(pga_obs), 1)
         self.assertEqual(pga_obs[0].SNCL, "SY.TOFB.ENE.--")
 

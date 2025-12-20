@@ -5,7 +5,15 @@ from dataclasses import dataclass, field
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import List, Tuple, Dict, Any, Optional
-from eewpw_parser.schemas import Detection, DetectionCore, FaultVertex, GMObs, Annotation
+from eewpw_parser.schemas import (
+    Annotation,
+    Detection,
+    DetectionCore,
+    FaultVertex,
+    FinderDetails,
+    GMInfo,
+    GMObs,
+)
 from eewpw_parser.utils import to_iso_utc_z, epoch_to_iso_z, trim
 from eewpw_parser.config import load_profile
 
@@ -100,6 +108,50 @@ class FinderBaseDialect:
         if not hasattr(self, "_profile_cache"):
             self._profile_cache = load_profile(self.PROFILE_NAME)
         return self._profile_cache
+
+    def _build_finder_details(
+        self,
+        *,
+        get_mag: Optional[float] = None,
+        get_lat: Optional[float] = None,
+        get_lon: Optional[float] = None,
+        get_dep: Optional[float] = None,
+        get_lik: Optional[float] = None,
+        get_otm: Optional[str] = None,
+        get_azm: Optional[float] = None,
+        solution: Optional[Dict[str, str]] = None,
+        finder_flags: Optional[Dict[str, str]] = None,
+    ) -> Optional[FinderDetails]:
+        """
+        Normalize FinDer-derived metrics to stable snake_case keys.
+        Epoch origin time lives in origin_time_epoch; other metrics remain stringified.
+        """
+        solution_metrics: Dict[str, str] = {}
+
+        def add_metric(key: str, val: Optional[float]) -> None:
+            if val is None:
+                return
+            solution_metrics[key] = str(val)
+
+        add_metric("mag", get_mag)
+        add_metric("epicenter_lat", get_lat)
+        add_metric("epicenter_lon", get_lon)
+        add_metric("depth", get_dep)
+        add_metric("likelihood", get_lik)
+        add_metric("azimuth", get_azm)
+
+        origin_time_epoch = str(get_otm) if get_otm is not None else None
+        solution = solution or {}
+
+        if not solution_metrics and origin_time_epoch is None and not solution and not finder_flags:
+            return None
+
+        return FinderDetails(
+            solution_metrics=solution_metrics,
+            origin_time_epoch=origin_time_epoch,
+            solution=solution,
+            finder_flags=finder_flags,
+        )
 
 
     def parse_file(self, path: str, algo: str = "finder", dialect: str = "scfinder") -> Tuple[List[Detection], List[Annotation], Dict[str, Any]]:
@@ -317,7 +369,7 @@ class FinderBaseDialect:
 
             event_id = m_eid.group(1)
 
-            get_mag = get_lat = get_lon = get_dep = get_lik = get_otm = None
+            get_mag = get_lat = get_lon = get_dep = get_lik = get_otm = get_azm = None
             rupture_list: List[FaultVertex] = []
             emission_ts_iso: Optional[str] = None
 
@@ -348,6 +400,8 @@ class FinderBaseDialect:
                     get_dep = float(m.group(1))
                 if (m := self.P_GET_LIK.search(s)):
                     get_lik = float(m.group(1))
+                if (m := self.P_GET_AZM.search(s)):
+                    get_azm = float(m.group(1))
                 if (m := self.P_GET_OTM.search(s)):
                     get_otm = m.group(1)
 
@@ -421,6 +475,16 @@ class FinderBaseDialect:
             v = version_by_event.get(event_id, 0) + 1
             version_by_event[event_id] = v
 
+            finder_details = self._build_finder_details(
+                get_mag=get_mag,
+                get_lat=get_lat,
+                get_lon=get_lon,
+                get_dep=get_dep,
+                get_lik=get_lik,
+                get_otm=get_otm,
+                get_azm=get_azm,
+            )
+
             pga_list: List[GMObs] = []
             if pending_station_list:
                 for lat, lon, sncl, t_epoch, pga in pending_station_list:
@@ -447,6 +511,7 @@ class FinderBaseDialect:
                     core_info=core,
                     fault_info=rupture_list,
                     gm_info={"pgv_obs": [], "pga_obs": pga_list},
+                    finder_details=finder_details,
                 )
             )
 
@@ -526,7 +591,7 @@ class SCFinderDialect(FinderBaseDialect):
     START_PLAYBACK_RE = re.compile(
         r"^(\d{4}[/\-]\d{2}[/\-]\d{2}\s+\d{2}:\d{2}:\d{2})\s+\[notice/Application\]\s+Starting scfinder"
     )
-    PROFILE_NAME: str = "profiles/finder_time_vs_mag.json"
+    PROFILE_NAME: str = "profiles/scfinder_time_vs_mag.json"
 
 
 class ShakeAlertFinderDialect(FinderBaseDialect):
@@ -740,6 +805,14 @@ class ShakeAlertFinderDialect(FinderBaseDialect):
 
             timestamp_final = timestamp_attr or core.orig_time
 
+            finder_details = self._build_finder_details(
+                get_mag=mag,
+                get_lat=lat,
+                get_lon=lon,
+                get_dep=depth,
+                get_lik=likelihood,
+            )
+
             dets.append(
                 Detection(
                     timestamp=timestamp_final,
@@ -751,6 +824,7 @@ class ShakeAlertFinderDialect(FinderBaseDialect):
                     core_info=core,
                     fault_info=fault_vertices,
                     gm_info={"pgv_obs": [], "pga_obs": pga_list},
+                    finder_details=finder_details,
                 )
             )
 
@@ -792,8 +866,8 @@ class NativeFinderDialect(FinderBaseDialect):
             if last_detection_index < 0 or last_detection_index >= len(dets):
                 return False
             det = dets[last_detection_index]
-            gm_info = det.gm_info or {"pgv_obs": [], "pga_obs": []}
-            pga_list = gm_info.setdefault("pga_obs", [])
+            gm_info_obj = det.gm_info if isinstance(det.gm_info, GMInfo) else GMInfo(**(det.gm_info or {}))
+            pga_list = gm_info_obj.pga_obs
             for lat, lon, sncl, t_epoch, pga in stations:
                 pga_list.append(
                     GMObs(
@@ -805,8 +879,7 @@ class NativeFinderDialect(FinderBaseDialect):
                         time=epoch_to_iso_z(str(t_epoch)),
                     )
                 )
-            gm_info.setdefault("pgv_obs", [])
-            det.gm_info = gm_info
+            det.gm_info = gm_info_obj
             return True
 
         while i < len(lines):
@@ -868,7 +941,7 @@ class NativeFinderDialect(FinderBaseDialect):
 
             event_id = m_eid.group(1)
 
-            get_mag = get_lat = get_lon = get_dep = get_lik = get_otm = None
+            get_mag = get_lat = get_lon = get_dep = get_lik = get_otm = get_azm = None
             rupture_list: List[FaultVertex] = []
             emission_ts_iso: Optional[str] = None
 
@@ -899,6 +972,8 @@ class NativeFinderDialect(FinderBaseDialect):
                     get_dep = float(m.group(1))
                 if (m := self.P_GET_LIK.search(s)):
                     get_lik = float(m.group(1))
+                if (m := self.P_GET_AZM.search(s)):
+                    get_azm = float(m.group(1))
                 if (m := self.P_GET_OTM.search(s)):
                     get_otm = m.group(1)
 
@@ -974,6 +1049,16 @@ class NativeFinderDialect(FinderBaseDialect):
             v = version_by_event.get(event_id, 0) + 1
             version_by_event[event_id] = v
 
+            finder_details = self._build_finder_details(
+                get_mag=get_mag,
+                get_lat=get_lat,
+                get_lon=get_lon,
+                get_dep=get_dep,
+                get_lik=get_lik,
+                get_otm=get_otm,
+                get_azm=get_azm,
+            )
+
             dets.append(
                 Detection(
                     timestamp=timestamp_iso,
@@ -985,6 +1070,7 @@ class NativeFinderDialect(FinderBaseDialect):
                     core_info=core,
                     fault_info=rupture_list,
                     gm_info={"pgv_obs": [], "pga_obs": []},
+                    finder_details=finder_details,
                 )
             )
 

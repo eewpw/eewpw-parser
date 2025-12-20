@@ -3,7 +3,14 @@ import re
 from dataclasses import dataclass, field
 from typing import List, Tuple, Dict, Any, Optional
 
-from eewpw_parser.schemas import Detection, DetectionCore, FaultVertex, GMObs, Annotation
+from eewpw_parser.schemas import (
+    Annotation,
+    Detection,
+    DetectionCore,
+    FaultVertex,
+    GMObs,
+    VSDetails,
+)
 from eewpw_parser.utils import to_iso_utc_z
 from eewpw_parser.config import load_profile
 from collections import deque
@@ -53,12 +60,15 @@ class VSEventState:
     last_ts_iso: Optional[str] = None
     stations: List[Dict[str, Any]] = field(default_factory=list)
     current_station: Optional[Dict[str, Any]] = None
+    stations_not_used: List[str] = field(default_factory=list)
+    summary_fields: Dict[str, str] = field(default_factory=dict)
 
     def start_station(self, sncl: str, wavetype: str, soil_class: str, magnitude: Optional[float]):
         if self.current_station:
             self.flush_station()
         self.current_station = {
             "sncl": sncl.strip(),
+            "component": None,
             "wavetype": wavetype.strip(),
             "soil": soil_class.strip(),
             "magnitude": magnitude,
@@ -66,7 +76,11 @@ class VSEventState:
             "lon": None,
             "pga_h": None,
             "pga_z": None,
+            "epi_dist_km": None,
         }
+        parts = sncl.split(".")
+        if len(parts) >= 3 and parts[2]:
+            self.current_station["component"] = parts[2]
 
     def flush_station(self):
         if not self.current_station:
@@ -117,6 +131,13 @@ class VSEventState:
             lon = st.get("lon")
             if lat is None or lon is None:
                 continue
+            vs_meta = {
+                "component": st.get("component"),
+                "station_magnitude": str(st.get("magnitude")) if st.get("magnitude") is not None else None,
+                "wavetype": st.get("wavetype"),
+                "soil_class": st.get("soil"),
+                "epi_dist_km": str(st.get("epi_dist_km")) if st.get("epi_dist_km") is not None else None,
+            }
             pga_list.append(
                 GMObs(
                     orig_sys="vs",
@@ -125,8 +146,21 @@ class VSEventState:
                     lat=str(lat),
                     lon=str(lon),
                     time=timestamp,
+                    extra={"vs": vs_meta},
                 )
             )
+
+        summary = dict(self.summary_fields)
+        if self.update_number is not None:
+            summary.setdefault("update_number", str(self.update_number))
+        if self.likelihood is not None:
+            summary.setdefault("likelihood", str(self.likelihood))
+        if self.vs_mag is not None:
+            summary.setdefault("vs_mag", str(self.vs_mag))
+        if self.median_mag is not None:
+            summary.setdefault("median_single_station_mag", str(self.median_mag))
+
+        vs_details = VSDetails(summary=summary, stations_not_used=list(self.stations_not_used))
 
         return Detection(
             timestamp=timestamp,
@@ -138,6 +172,7 @@ class VSEventState:
             core_info=core,
             fault_info=[],
             gm_info={"pgv_obs": [], "pga_obs": pga_list},
+            vs_details=vs_details,
         )
 
 
@@ -318,6 +353,7 @@ class VSDialect:
         if (m := self.P_STATION_LOC.search(message)) and ev.current_station:
             ev.current_station["lat"] = _safe_float(m.group(1))
             ev.current_station["lon"] = _safe_float(m.group(2))
+            ev.current_station["epi_dist_km"] = _safe_float(m.group(3))
 
         if (m := self.P_PGA_Z.search(message)) and ev.current_station:
             ev.current_station["pga_z"] = _safe_float(m.group(1))

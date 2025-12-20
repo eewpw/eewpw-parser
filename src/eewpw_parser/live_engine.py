@@ -6,7 +6,7 @@ from typing import Optional, List
 
 from dateutil import parser as dtp
 
-from .schemas import Detection, Annotation, Meta
+from .schemas import Detection, Annotation, Meta, DEFAULT_SCHEMA_VERSION
 from .live_writer import DailyAlgoWriter
 
 # Finder streaming
@@ -119,6 +119,7 @@ class LiveEngine:
             meta = Meta(
                 algo=self.algo,
                 dialect=self.dialect,
+                schema_version=DEFAULT_SCHEMA_VERSION,
                 files=None,
                 started_at=self._started_dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ") if self._started_dt else None,
                 finished_at=self._finished_dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ") if self._finished_dt else None,

@@ -1,9 +1,11 @@
 {
   "algorithm": "finder",
-  "dialect": "scfinder",
+  "dialect": "finder",
   "patterns": {
-    "timestamp_regex": "(\\d{4}/\\d{2}/\\d{2} \\d{2}:\\d{2}:\\d{2})",
-    "1": "length has increased",
-    "2": "length has decreased"
+    "timestamp_regex": "^(\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}:\\d{3})",
+    "1": "increased",
+    "2": "decreased",
+    "3": "SOLUTION TEMPLATE"
+
   }
 }
