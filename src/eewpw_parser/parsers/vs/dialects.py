@@ -288,8 +288,6 @@ class VSDialect:
 
         patterns_cfg = self.profile.get("patterns", {})
         for pid, pat in patterns_cfg.items():
-            if pid == "timestamp_regex":
-                continue
             if re.search(pat, line):
                 ann.append(
                     Annotation(

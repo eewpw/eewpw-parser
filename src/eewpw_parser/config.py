@@ -60,9 +60,14 @@ def load_profile(relative_path: str) -> dict:
         rel_path = f"profiles/{rel_path}"
 
     try:
-        return open_config_json(rel_path)
+        profile = open_config_json(rel_path)
     except (FileNotFoundError, json.JSONDecodeError):
         return {}
+
+    patterns = profile.get("patterns")
+    if isinstance(patterns, dict):
+        patterns.pop("timestamp_regex", None)
+    return profile
 
 
 def get_data_root(cfg: Optional[dict]) -> Path:

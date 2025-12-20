@@ -287,8 +287,6 @@ class FinderBaseDialect:
                 state.playback_time_iso = ts_iso
 
             for pid, pat in patterns_cfg.items():
-                if pid == "timestamp_regex":
-                    continue
                 if re.search(pat, line):
                     ann.append(
                         Annotation(
@@ -643,8 +641,6 @@ class ShakeAlertFinderDialect(FinderBaseDialect):
             state.file_end_ts_iso = ts_iso
 
             for pid, pat in patterns_cfg.items():
-                if pid == "timestamp_regex":
-                    continue
                 if re.search(pat, line):
                     ann.append(
                         Annotation(
