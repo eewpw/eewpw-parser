@@ -6,44 +6,12 @@ from functools import lru_cache
 from pathlib import Path
 from eewpw_parser.config_loader import open_config_json
 
-# -----------------------------------------------------------------------------
-# Canonical filenames for known algorithms. Used to map algo names to config files.
-# Add new algorithms here as needed - no base path is included, only filenames.
-ALGO_CONFIG_MAP = {
-    "finder": "finder.json",
-    "vs": "vs.json",
-}
-# -----------------------------------------------------------------------------
 
-
-def config_filename_for_algo(algo: str) -> str:
-    # Keep algo selection strict so typos fail fast.
-    try:
-        return ALGO_CONFIG_MAP[algo]
-    except KeyError:
-        supported = ", ".join(sorted(ALGO_CONFIG_MAP))
-        raise ValueError(f"Unsupported algo '{algo}'. Supported: {supported}")
-
-
-def load_config(algo_cfg_path: str = "finder.json") -> Dict[str, Any]:
+def load_global_config() -> Dict[str, Any]:
     """
-    Load and merge global and algorithm-specific configuration files.
-    configs/global.json is loaded first, then algo_cfg_path is loaded and merged on top.
-    These configurations are used to guide the parsing process in the dialect parsers.
+    Load the global configuration (no algorithm-specific layer).
     """
-
-    def _deep_merge(a: Dict[str, Any], b: Dict[str, Any]) -> Dict[str, Any]:
-        out = dict(a)
-        for k, v in b.items():
-            if isinstance(v, dict) and isinstance(out.get(k), dict):
-                out[k] = _deep_merge(out[k], v)
-            else:
-                out[k] = v
-        return out
-
-    g = open_config_json("global.json")
-    a = open_config_json(algo_cfg_path)
-    return _deep_merge(g, a)
+    return open_config_json("global.json")
 
 
 @lru_cache(maxsize=None)

@@ -21,6 +21,8 @@ class TestCLIStream(unittest.TestCase):
             cmd = CLI + [
                 "--algo",
                 "vs",
+                "--dialect",
+                "scvsmag",
                 "--mode",
                 "stream-jsonl",
                 "-o",

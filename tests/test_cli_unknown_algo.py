@@ -15,7 +15,7 @@ def test_cli_rejects_unknown_algo():
         dummy_log = Path(td) / "dummy.log"
         dummy_log.write_text("line", encoding="utf-8")
         out_path = Path(td) / "out.json"
-        cmd = CLI + ["--algo", "foo", "--output", str(out_path), str(dummy_log)]
+        cmd = CLI + ["--algo", "foo", "--dialect", "scfinder", "--output", str(out_path), str(dummy_log)]
         result = subprocess.run(cmd, capture_output=True, text=True, env=ENV, cwd=td)
         assert result.returncode != 0
         assert "invalid choice" in (result.stderr or result.stdout)

@@ -1,7 +1,7 @@
 import json
 import argparse
 from pathlib import Path
-from eewpw_parser.config import load_config, config_filename_for_algo
+from eewpw_parser.config import load_global_config
 from eewpw_parser.config_loader import set_config_root_override
 from eewpw_parser.parsers.finder.finder_parser import FinderParser
 from eewpw_parser.parsers.vs.vs_parser import VSParser
@@ -10,7 +10,7 @@ from eewpw_parser.schemas import FinalDoc
 def main():
     ap = argparse.ArgumentParser(description="EEWPW deterministic parser")
     ap.add_argument("--algo", required=True, choices=["finder", "vs"], help="Algorithm to parse")
-    ap.add_argument("--dialect", default=None, help="Dialect (e.g., scfinder)")
+    ap.add_argument("--dialect", required=True, help="Dialect (e.g., scfinder)")
     ap.add_argument("--config-root", type=Path, default=None, help="Optional override for configs root")
     ap.add_argument("-v", "--verbose", action="store_true", help="Enable verbose console output")
     ap.add_argument(
@@ -31,10 +31,9 @@ def main():
     if args.config_root is not None:
         set_config_root_override(args.config_root)
 
-    cfg_path = config_filename_for_algo(args.algo)
-    cfg = load_config(cfg_path)
-    if args.dialect:
-        cfg["dialect"] = args.dialect
+    cfg = load_global_config()
+    cfg["algo"] = args.algo
+    cfg["dialect"] = args.dialect
     cfg["verbose"] = args.verbose
     instance = args.instance or f"{args.algo}@unknown"
 
