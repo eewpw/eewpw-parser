@@ -55,7 +55,7 @@ class LiveEngine:
         self._ann_profile = {
             "finder": "time_vs_magnitude",
             "vs": "time_vs_magnitude",
-        }.get(self.algo, "annotations")
+        }.get(self.algo, "time_vs_magnitude")
 
     def _parse_ts(self, ts_iso: str) -> datetime:
         dt = dtp.parse(ts_iso)
