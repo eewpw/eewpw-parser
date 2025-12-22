@@ -25,6 +25,7 @@ class TestVSParser(unittest.TestCase):
         self.assertGreaterEqual(len(first.gm_info.pga_obs), 1)
         # Median single-station magnitude captured (may be None if absent)
         self.assertTrue(hasattr(first.core_info, "vs_median_single_station_mag"))
+        self.assertGreaterEqual(len(first.vs_details.stations_not_used), 1)
 
     def test_vs_median_numeric_and_nan(self):
         parser = VSParser({"dialect": "scvsmag"})

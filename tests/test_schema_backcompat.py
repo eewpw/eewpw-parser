@@ -106,7 +106,7 @@ def test_vs_station_metadata_namespaced_under_vs_key():
     obs = det.gm_info.pga_obs[0]
     assert obs.extra == {
         "vs": {
-            "component": "HHZ",
+            "component": "H",
             "station_magnitude": "3.2",
             "wavetype": "Z",
             "soil_class": "SOIL",
