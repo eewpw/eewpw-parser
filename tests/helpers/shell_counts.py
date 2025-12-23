@@ -79,3 +79,84 @@ def compute_vs_observed_counts(doc_json: Dict) -> Dict[str, int]:
         "gm_pgv_H": gm_pgv_H,
         "gm_pgd_H": gm_pgd_H,
     }
+
+
+def compute_finder_expected_counts(log_path: Path) -> Dict[str, int]:
+    """
+    Derive expected counts from scfinder.log without invoking the parser.
+    """
+    from eewpw_parser.parsers.finder.dialects import FinderBaseDialect
+
+    lines = Path(log_path).read_text(encoding="utf-8", errors="ignore").splitlines()
+    header_re = FinderBaseDialect.P_STATION_HEADER
+    row_re = FinderBaseDialect.P_STATION_ROW
+    event_re = FinderBaseDialect.P_EVENT_ID
+    rupture_re = FinderBaseDialect.P_GET_RUP
+    num_stations_re = FinderBaseDialect.P_GET_NUM_STATIONS
+
+    det_updates = 0
+    rupture_blocks = 0
+    station_rows = 0
+    num_stations_lines = 0
+
+    pending_rows = None
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+
+        if header_re.search(line):
+            pending_rows = []
+            i += 1
+            continue
+
+        matches = row_re.findall(line)
+        if pending_rows is not None and matches:
+            for m in matches:
+                if int(m[5]) == 1:
+                    pending_rows.append(m)
+
+        if event_re.search(line):
+            det_updates += 1
+            j = i + 1
+            while j < len(lines):
+                s = lines[j]
+                if header_re.search(s) or event_re.search(s):
+                    break
+                if rupture_re.search(s):
+                    rupture_blocks += 1
+                if num_stations_re.search(s):
+                    num_stations_lines += 1
+                j += 1
+
+            station_rows += len(pending_rows or [])
+            pending_rows = None
+            i = j
+            continue
+
+        i += 1
+
+    return {
+        "det_update_blocks": det_updates,
+        "rupture_blocks": rupture_blocks,
+        "station_rows_included": station_rows,
+        "num_stations_lines": num_stations_lines,
+    }
+
+
+def compute_finder_observed_counts(doc_json: Dict) -> Dict[str, int]:
+    detections = doc_json.get("detections") or []
+    det_count = len(detections)
+    rupture_blocks = sum(1 for d in detections if d.get("fault_info"))
+    station_rows = sum(len((d.get("gm_info") or {}).get("pga_obs") or []) for d in detections)
+    num_stations = 0
+    for det in detections:
+        fd = det.get("finder_details") or {}
+        sm = fd.get("solution_metrics") or {}
+        if "num_stations" in sm:
+            num_stations += 1
+    return {
+        "det_update_blocks": det_count,
+        "rupture_blocks": rupture_blocks,
+        "station_rows_included": station_rows,
+        "num_stations_lines": num_stations,
+    }
