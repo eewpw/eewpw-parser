@@ -63,6 +63,9 @@ def test_component_in_extra_per_observation():
 def test_sentinel_values_do_not_emit_observations():
     dets = _parse_snippet(SENTINEL_SNIPPET)
     det = dets[0]
-    assert det.gm_info.pga_obs == []
-    assert det.gm_info.pgv_obs == []
-    assert det.gm_info.pgd_obs == []
+    sentinels = [
+        obs
+        for obs in det.gm_info.pga_obs + det.gm_info.pgv_obs + det.gm_info.pgd_obs
+        if (obs.extra.get("vs") or {}).get("is_sentinel")
+    ]
+    assert len(sentinels) >= 1

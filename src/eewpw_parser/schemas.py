@@ -30,10 +30,14 @@ FinalDoc shape (JSON):
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel, Field, validator
 
-# Default schema version for back-compatibility. Needed for the 
-# legacy files without schema_version. The version format is opaque.
-# For now, the adapted logic is "year.increment" (e.g., "2025.0", "2025.1").
-DEFAULT_SCHEMA_VERSION = "2025.0"
+# Current schema version, The version format is opaque. For now,
+# the adapted logic is "year.increment" (e.g., "2025.0", "2025.1").
+SCHEMA_VERSION = "2025.1"
+
+# Default schema version for back-compatibility. Might be needed for the 
+# legacy files without schema_version. 
+SCHEMA_VERSION_IF_MISSING = "2025.0"
+
 
 class Annotation(BaseModel):
     timestamp: str  # ISO-8601 Z
@@ -164,7 +168,7 @@ class Detection(BaseModel):
 class Meta(BaseModel):
     algo: str
     dialect: str
-    schema_version: str = DEFAULT_SCHEMA_VERSION
+    schema_version: str = SCHEMA_VERSION
     files: Optional[List[str]] = None
     started_at: Optional[str] = None
     finished_at: Optional[str] = None
@@ -175,7 +179,7 @@ class Meta(BaseModel):
     @validator("schema_version", pre=True, always=True)
     def _default_schema_version(cls, v):
         # Back-compat: fill missing schema_version on read.
-        return v or DEFAULT_SCHEMA_VERSION
+        return v or SCHEMA_VERSION
 
 class FinalDoc(BaseModel):
     meta: Meta

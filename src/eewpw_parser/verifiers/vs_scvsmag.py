@@ -21,25 +21,23 @@ P_VS_TIMES = re.compile(r"creation time:\s*([^;]+);\s*origin time:\s*([^;]+);")
 P_UNUSED = re.compile(r"Stations not used for VS-mag:\s*(?P<list>.+)$")
 
 
-def _to_float_or_none(val: str):
+def _parse_oracle_gm(val: str):
     raw = val.strip()
-    if not raw:
-        return None
-    if raw.lower() == "nan":
-        return None
+    if not raw or raw.lower() == "nan":
+        return None, False
+    if raw == "-1.00e+00":
+        return None, True
     try:
-        f = float(raw)
+        return float(raw), False
     except ValueError:
-        return None
-    if f == -1.0:
-        return None
-    return f
+        return None, False
 
 
 def extract_vs_oracle_from_log(path: str) -> Dict[Tuple[str, int], Dict[str, Any]]:
     oracle: Dict[Tuple[str, int], Dict[str, Any]] = {}
     current: Dict[str, Any] = {}
     last_sncl: str = ""
+    last_has_loc: bool = False
 
     def finalize_current():
         if not current:
@@ -70,12 +68,14 @@ def extract_vs_oracle_from_log(path: str) -> Dict[Tuple[str, int], Dict[str, Any
                     "stations": {},
                 }
                 last_sncl = ""
+                last_has_loc = False
                 continue
 
             if (m := P_END.search(message)):
                 finalize_current()
                 current = {}
                 last_sncl = ""
+                last_has_loc = False
                 continue
 
             if not current:
@@ -98,23 +98,33 @@ def extract_vs_oracle_from_log(path: str) -> Dict[Tuple[str, int], Dict[str, Any
 
             if (m := P_SENSOR.search(message)):
                 sncl = m.group(1).strip()
-                current["stations"].setdefault(sncl, {"measures": {"PGA": {"Z": None, "H": None}, "PGV": {"Z": None, "H": None}, "PGD": {"Z": None, "H": None}}})
+                current["stations"].setdefault(
+                    sncl,
+                    {
+                        "measures": {
+                            "PGA": {"Z": {"value": None, "sentinel": False}, "H": {"value": None, "sentinel": False}},
+                            "PGV": {"Z": {"value": None, "sentinel": False}, "H": {"value": None, "sentinel": False}},
+                            "PGD": {"Z": {"value": None, "sentinel": False}, "H": {"value": None, "sentinel": False}},
+                        }
+                    },
+                )
                 last_sncl = sncl
+                last_has_loc = False
 
             if (m := P_LOC.search(message)):
-                pass
+                last_has_loc = True
 
-            if (m := P_Z.search(message)) and current.get("stations") and last_sncl:
+            if (m := P_Z.search(message)) and current.get("stations") and last_sncl and last_has_loc:
                 measures = current["stations"][last_sncl]["measures"]
-                measures["PGA"]["Z"] = _to_float_or_none(m.group(1))
-                measures["PGV"]["Z"] = _to_float_or_none(m.group(2))
-                measures["PGD"]["Z"] = _to_float_or_none(m.group(3))
+                measures["PGA"]["Z"]["value"], measures["PGA"]["Z"]["sentinel"] = _parse_oracle_gm(m.group(1))
+                measures["PGV"]["Z"]["value"], measures["PGV"]["Z"]["sentinel"] = _parse_oracle_gm(m.group(2))
+                measures["PGD"]["Z"]["value"], measures["PGD"]["Z"]["sentinel"] = _parse_oracle_gm(m.group(3))
 
-            if (m := P_H.search(message)) and current.get("stations") and last_sncl:
+            if (m := P_H.search(message)) and current.get("stations") and last_sncl and last_has_loc:
                 measures = current["stations"][last_sncl]["measures"]
-                measures["PGA"]["H"] = _to_float_or_none(m.group(1))
-                measures["PGV"]["H"] = _to_float_or_none(m.group(2))
-                measures["PGD"]["H"] = _to_float_or_none(m.group(3))
+                measures["PGA"]["H"]["value"], measures["PGA"]["H"]["sentinel"] = _parse_oracle_gm(m.group(1))
+                measures["PGV"]["H"]["value"], measures["PGV"]["H"]["sentinel"] = _parse_oracle_gm(m.group(2))
+                measures["PGD"]["H"]["value"], measures["PGD"]["H"]["sentinel"] = _parse_oracle_gm(m.group(3))
 
     finalize_current()
     return oracle
@@ -126,11 +136,15 @@ def summarize_vs_from_doc(doc: FinalDoc) -> Dict[Tuple[str, int], Dict[str, Any]
     for det in doc.detections:
         key = (det.event_id, int(det.version))
         obs_set: Set[Tuple[str, str, str, str, float]] = set()
+        sentinel_obs: Set[Tuple[str, str, str]] = set()
         station_measures: Dict[str, Dict[str, Dict[str, float]]] = {}
 
         def add_obs(measure: str, obs_list):
             for obs in obs_list:
                 comp = (obs.extra.get("vs") or {}).get("component")
+                if (obs.extra.get("vs") or {}).get("is_sentinel"):
+                    sentinel_obs.add((measure, comp, obs.SNCL))
+                    continue
                 value_float = float(obs.value)
                 obs_set.add((measure, comp, obs.SNCL, obs.time, value_float))
                 station_measures.setdefault(obs.SNCL, {}).setdefault(measure, {})[comp] = value_float
@@ -146,6 +160,7 @@ def summarize_vs_from_doc(doc: FinalDoc) -> Dict[Tuple[str, int], Dict[str, Any]
             "origin_time": det.core_info.orig_time,
             "stations_not_used": list(det.vs_details.stations_not_used) if det.vs_details else [],
             "obs": obs_set,
+            "sentinel_obs": sentinel_obs,
             "station_measures": station_measures,
         }
 
@@ -177,21 +192,39 @@ def verify_vs_scvsmag(doc: FinalDoc, oracle: Dict[Tuple[str, int], Dict[str, Any
 
         stations = o.get("stations", {}) or {}
         for sncl, data in stations.items():
-            measures = (data or {}).get("measures") or {}
-            for measure, comps in measures.items():
-                for comp, val in comps.items():
-                    expected_obs_keys.add((measure, comp, sncl))
-                    if val is None:
-                        matches = [ob for ob in obs["obs"] if ob[0] == measure and ob[1] == comp and ob[2] == sncl]
-                        if matches:
-                            raise AssertionError(
-                                f"[{event_id} v{version}] unexpected observation station={sncl} measure={measure} comp={comp} (sentinel in log)"
-                            )
-                    else:
+                measures = (data or {}).get("measures") or {}
+                for measure, comps in measures.items():
+                    for comp, detail in comps.items():
+                        val = None
+                        sentinel_flag = False
+                        if isinstance(detail, dict):
+                            val = detail.get("value")
+                            sentinel_flag = detail.get("sentinel", False)
+                        else:
+                            val = detail
+                        if val is None and not sentinel_flag:
+                            continue
+                        expected_obs_keys.add((measure, comp, sncl))
+                        if sentinel_flag:
+                            if sncl in o.get("stations_not_used", []):
+                                continue
+                            if (measure, comp, sncl) not in obs["sentinel_obs"]:
+                                raise AssertionError(
+                                    f"[{event_id} v{version}] missing sentinel observation station={sncl} measure={measure} comp={comp}"
+                                )
+                            if any(ob for ob in obs["obs"] if ob[0] == measure and ob[1] == comp and ob[2] == sncl):
+                                raise AssertionError(
+                                    f"[{event_id} v{version}] unexpected numeric observation for sentinel station={sncl} measure={measure} comp={comp}"
+                                )
+                            continue
                         matches = [ob for ob in obs["obs"] if ob[0] == measure and ob[1] == comp and ob[2] == sncl]
                         if not matches:
                             raise AssertionError(
                                 f"[{event_id} v{version}] missing observation station={sncl} measure={measure} comp={comp}"
+                            )
+                        if (measure, comp, sncl) in obs["sentinel_obs"]:
+                            raise AssertionError(
+                                f"[{event_id} v{version}] unexpected sentinel observation station={sncl} measure={measure} comp={comp}"
                             )
                         time_set = {m[3] for m in matches}
                         if time_set != {obs["creation_time"]}:
@@ -204,8 +237,20 @@ def verify_vs_scvsmag(doc: FinalDoc, oracle: Dict[Tuple[str, int], Dict[str, Any
                                 f"[{event_id} v{version}] value mismatch station={sncl} measure={measure} comp={comp}: expected {val} got {found_val}"
                             )
 
-        observed_keys = {(ob[0], ob[1], ob[2]) for ob in obs["obs"]}
-        extra = observed_keys - {k for k in expected_obs_keys if stations.get(k[2]) and stations[k[2]]["measures"][k[0]][k[1]] is not None}
+        observed_keys = {(ob[0], ob[1], ob[2]) for ob in obs["obs"]} | obs["sentinel_obs"]
+        valid_expected = set()
+        for sncl, data in stations.items():
+            measures = data["measures"]
+            for measure, comps in measures.items():
+                for comp, detail in comps.items():
+                    val = detail.get("value") if isinstance(detail, dict) else detail
+                    sentinel_flag = detail.get("sentinel", False) if isinstance(detail, dict) else False
+                    if val is None and not sentinel_flag:
+                        continue
+                    if sentinel_flag and sncl in o.get("stations_not_used", []):
+                        continue
+                    valid_expected.add((measure, comp, sncl))
+        extra = observed_keys - valid_expected
         if extra:
             example = next(iter(extra))
             raise AssertionError(

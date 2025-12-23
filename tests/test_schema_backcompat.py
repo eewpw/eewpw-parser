@@ -4,7 +4,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
-from eewpw_parser.schemas import FinalDoc, DEFAULT_SCHEMA_VERSION  # noqa: E402
+from eewpw_parser.schemas import FinalDoc, SCHEMA_VERSION  # noqa: E402
 from eewpw_parser.parsers.vs.dialects import VSEventState  # noqa: E402
 
 
@@ -73,7 +73,7 @@ def test_meta_schema_version_defaults_when_missing():
     payload = _base_doc(det)
     # meta.schema_version intentionally omitted
     doc = FinalDoc.parse_obj(payload)
-    assert doc.meta.schema_version == DEFAULT_SCHEMA_VERSION
+    assert doc.meta.schema_version == SCHEMA_VERSION
 
 
 def test_vs_station_metadata_namespaced_under_vs_key():

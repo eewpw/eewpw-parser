@@ -45,6 +45,15 @@ def parse_optional_float(value: Optional[str]) -> Optional[float]:
     return float(raw)
 
 
+def _parse_gm_field(raw: str):
+    txt = raw.strip()
+    if txt.lower() == "nan":
+        return None, None
+    if txt == "-1.00e+00":
+        return None, "-1.00e+00"
+    return float(txt), None
+
+
 @dataclass
 class VSEventState:
     event_id: Optional[str] = None
@@ -80,6 +89,18 @@ class VSEventState:
             "pga_z": None,
             "pgv_z": None,
             "pgd_z": None,
+            "pga_h_val": None,
+            "pgv_h_val": None,
+            "pgd_h_val": None,
+            "pga_z_val": None,
+            "pgv_z_val": None,
+            "pgd_z_val": None,
+            "pga_h_sentinel_raw": None,
+            "pgv_h_sentinel_raw": None,
+            "pgd_h_sentinel_raw": None,
+            "pga_z_sentinel_raw": None,
+            "pgv_z_sentinel_raw": None,
+            "pgd_z_sentinel_raw": None,
             "epi_dist_km": None,
         }
         parts = sncl.split(".")
@@ -134,7 +155,7 @@ class VSEventState:
             lon = st.get("lon")
             if lat is None or lon is None:
                 continue
-            vs_meta = {
+            vs_meta_base = {
                 "component": None,
                 "station_magnitude": str(st.get("magnitude")) if st.get("magnitude") is not None else None,
                 "wavetype": st.get("wavetype"),
@@ -142,11 +163,26 @@ class VSEventState:
                 "epi_dist_km": str(st.get("epi_dist_km")) if st.get("epi_dist_km") is not None else None,
             }
 
-            def add_obs(val, lst: List[GMObs], component: str):
+            def add_obs(val, sentinel_raw, lst: List[GMObs], component: str):
+                meta = dict(vs_meta_base)
+                meta["component"] = component
+                if sentinel_raw is not None:
+                    meta["is_sentinel"] = True
+                    meta["raw_value"] = sentinel_raw
+                    lst.append(
+                        GMObs(
+                            orig_sys="vs",
+                            SNCL=st.get("sncl", ""),
+                            value=sentinel_raw,
+                            lat=str(lat),
+                            lon=str(lon),
+                            time=timestamp,
+                            extra={"vs": meta},
+                        )
+                    )
+                    return
                 if val is None:
                     return
-                meta = dict(vs_meta)
-                meta["component"] = component
                 lst.append(
                     GMObs(
                         orig_sys="vs",
@@ -159,12 +195,19 @@ class VSEventState:
                     )
                 )
 
-            add_obs(st.get("pga_z"), pga_list, "Z")
-            add_obs(st.get("pga_h"), pga_list, "H")
-            add_obs(st.get("pgv_z"), pgv_list, "Z")
-            add_obs(st.get("pgv_h"), pgv_list, "H")
-            add_obs(st.get("pgd_z"), pgd_list, "Z")
-            add_obs(st.get("pgd_h"), pgd_list, "H")
+            def val_pair(name: str):
+                val = st.get(f"{name}_val")
+                sentinel_raw = st.get(f"{name}_sentinel_raw")
+                if val is None and sentinel_raw is None:
+                    val = st.get(name)
+                return val, sentinel_raw
+
+            add_obs(*val_pair("pga_z"), pga_list, component="Z")
+            add_obs(*val_pair("pga_h"), pga_list, component="H")
+            add_obs(*val_pair("pgv_z"), pgv_list, component="Z")
+            add_obs(*val_pair("pgv_h"), pgv_list, component="H")
+            add_obs(*val_pair("pgd_z"), pgd_list, component="Z")
+            add_obs(*val_pair("pgd_h"), pgd_list, component="H")
 
         summary = dict(self.summary_fields)
         if self.update_number is not None:
@@ -371,14 +414,14 @@ class VSDialect:
             ev.current_station["epi_dist_km"] = _safe_float(m.group(3))
 
         if (m := self.P_PGA_Z.search(message)) and ev.current_station:
-            ev.current_station["pga_z"] = _safe_float(m.group(1))
-            ev.current_station["pgv_z"] = _safe_float(m.group(2))
-            ev.current_station["pgd_z"] = _safe_float(m.group(3))
+            ev.current_station["pga_z_val"], ev.current_station["pga_z_sentinel_raw"] = _parse_gm_field(m.group(1))
+            ev.current_station["pgv_z_val"], ev.current_station["pgv_z_sentinel_raw"] = _parse_gm_field(m.group(2))
+            ev.current_station["pgd_z_val"], ev.current_station["pgd_z_sentinel_raw"] = _parse_gm_field(m.group(3))
 
         if (m := self.P_PGA_H.search(message)) and ev.current_station:
-            ev.current_station["pga_h"] = _safe_float(m.group(1))
-            ev.current_station["pgv_h"] = _safe_float(m.group(2))
-            ev.current_station["pgd_h"] = _safe_float(m.group(3))
+            ev.current_station["pga_h_val"], ev.current_station["pga_h_sentinel_raw"] = _parse_gm_field(m.group(1))
+            ev.current_station["pgv_h_val"], ev.current_station["pgv_h_sentinel_raw"] = _parse_gm_field(m.group(2))
+            ev.current_station["pgd_h_val"], ev.current_station["pgd_h_sentinel_raw"] = _parse_gm_field(m.group(3))
 
         if (m := self.P_VS_MAG.search(message)):
             ev.vs_mag = _safe_float(m.group("vs_mag"))
