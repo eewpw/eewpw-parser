@@ -50,11 +50,17 @@ class FinderBaseDialect:
     # Core patterns
     P_EVENT_ID = re.compile(r"\bevent_id\s*=\s*(\d+)")
     P_GET_MAG = re.compile(r"->\s*get_mag\s*=\s*([0-9.]+)")
+    P_GET_MAG_UNC = re.compile(r"->\s*get_mag_uncer\s*=\s*([0-9.]+)")
     P_GET_LAT = re.compile(r"->\s*get_epicenter_lat\s*=\s*(-?[0-9.]+)")
+    P_GET_LAT_UNC = re.compile(r"->\s*get_epicenter_lat_uncer\s*=\s*([0-9.]+)")
     P_GET_LON = re.compile(r"->\s*get_epicenter_lon\s*=\s*(-?[0-9.]+)")
+    P_GET_LON_UNC = re.compile(r"->\s*get_epicenter_lon_uncer\s*=\s*([0-9.]+)")
     P_GET_DEP = re.compile(r"->\s*get_depth\s*=\s*([0-9.]+)")
+    P_GET_DEP_UNC = re.compile(r"->\s*get_depth_uncer\s*=\s*([0-9.]+)")
     P_GET_LIK = re.compile(r"->\s*get_likelihood\s*=\s*([0-9.]+)")
     P_GET_OTM = re.compile(r"->\s*get_origin_time\s*=\s*([0-9\.e\+\-]+)")
+    P_GET_OTM_UNC = re.compile(r"->\s*get_origin_time_uncer\s*=\s*([0-9\.e\+\-]+)")
+    P_GET_NUM_STATIONS = re.compile(r"->\s*get_num_stations\s*=\s*(\d+)")
     P_GET_AZM = re.compile(r"->\s*get_azimuth\s*=\s*([0-9.]+)")
     P_GET_RUP = re.compile(r"get_rupture_list\s*=\s*(.*)")
     P_RUP_PT  = re.compile(r"([-\d.]+)\/([-\d.]+)\/([-\d.]+)")
@@ -63,6 +69,9 @@ class FinderBaseDialect:
 
     # Backward lookups
     P_SOL_TPL = re.compile(r"SOLUTION TEMPLATE:\s*Template file name\s*=\s*(\S+)")    
+    P_SOL_COORDS = re.compile(r"SOLUTION COORDINATES:\s*(.*)")
+    P_SOL_RUP_LINE = re.compile(r"(?:\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}[:.]\d{1,6}\s+)?SOLUTION RUPTURE:\s*(.*)")
+    P_SOL_RUP_VERSION = re.compile(r"\bVersion\s+(\d+)\b")
         
     # Stations header and row (include=1 only)
     P_STATION_HEADER = re.compile(r"The stations that exceeded the minimum threshold|Stations with PGA above the min threshold")
@@ -113,11 +122,17 @@ class FinderBaseDialect:
         self,
         *,
         get_mag: Optional[float] = None,
+        get_mag_unc: Optional[float] = None,
         get_lat: Optional[float] = None,
+        get_lat_unc: Optional[float] = None,
         get_lon: Optional[float] = None,
+        get_lon_unc: Optional[float] = None,
         get_dep: Optional[float] = None,
+        get_dep_unc: Optional[float] = None,
         get_lik: Optional[float] = None,
         get_otm: Optional[str] = None,
+        get_otm_unc: Optional[float] = None,
+        get_num_stations: Optional[int] = None,
         get_azm: Optional[float] = None,
         solution: Optional[Dict[str, str]] = None,
         finder_flags: Optional[Dict[str, str]] = None,
@@ -134,10 +149,18 @@ class FinderBaseDialect:
             solution_metrics[key] = str(val)
 
         add_metric("mag", get_mag)
+        add_metric("mag_uncer", get_mag_unc)
         add_metric("epicenter_lat", get_lat)
+        add_metric("epicenter_lat_uncer", get_lat_unc)
         add_metric("epicenter_lon", get_lon)
+        add_metric("epicenter_lon_uncer", get_lon_unc)
         add_metric("depth", get_dep)
+        add_metric("depth_uncer", get_dep_unc)
         add_metric("likelihood", get_lik)
+        add_metric("origin_time_uncer", get_otm_unc)
+        # num_stations may be int
+        if get_num_stations is not None:
+            solution_metrics["num_stations"] = str(get_num_stations)
         add_metric("azimuth", get_azm)
 
         origin_time_epoch = str(get_otm) if get_otm is not None else None
@@ -292,7 +315,7 @@ class FinderBaseDialect:
                         Annotation(
                             timestamp=ts_iso,
                             pattern=pat,
-                            line=absolute_line,
+                            line=str(absolute_line),
                             text=line.rstrip("\n"),
                             pattern_id=pid,
                         )
@@ -368,8 +391,46 @@ class FinderBaseDialect:
             event_id = m_eid.group(1)
 
             get_mag = get_lat = get_lon = get_dep = get_lik = get_otm = get_azm = None
+            get_mag_unc = get_lat_unc = get_lon_unc = get_dep_unc = get_otm_unc = None
+            get_num_stations: Optional[int] = None
             rupture_list: List[FaultVertex] = []
             emission_ts_iso: Optional[str] = None
+            solution_fields: Dict[str, str] = {}
+            finder_flags: Dict[str, str] = {}
+
+            # Look back a bit to capture SOLUTION lines and flags that often
+            # precede the explicit event_id marker in scfinder logs.
+            if state.recent_lines:
+                for _, prev_line in list(state.recent_lines)[-100:][::-1]:
+                    # SOLUTION RUPTURE
+                    m_rup_line_b = self.P_SOL_RUP_LINE.search(prev_line)
+                    if m_rup_line_b:
+                        tail = m_rup_line_b.group(1)
+                        mver_b = self.P_SOL_RUP_VERSION.search(prev_line)
+                        if mver_b:
+                            version_by_event[event_id] = str(mver_b.group(1))
+                            solution_fields["Version"] = str(mver_b.group(1))
+                        for part in tail.split(","):
+                            part = part.strip()
+                            if "=" in part:
+                                k, v = part.split("=", 1)
+                                solution_fields[trim(k)] = trim(v)
+                    # SOLUTION COORDINATES
+                    m_coords_b = self.P_SOL_COORDS.search(prev_line)
+                    if m_coords_b:
+                        tail = m_coords_b.group(1)
+                        for kv in tail.split(","):
+                            if "=" in kv:
+                                k, v = kv.split("=", 1)
+                                solution_fields[trim(k)] = trim(v)
+                    # SOLUTION TEMPLATE
+                    m_tpl_b = self.P_SOL_TPL.search(prev_line)
+                    if m_tpl_b:
+                        solution_fields["Template file name"] = trim(m_tpl_b.group(1))
+                    # Finder flags
+                    m_flag_b = re.search(r"process:\s*initial\s*finder_flags_new\.(\w+)\s*=\s*(\S+)", prev_line)
+                    if m_flag_b:
+                        finder_flags[m_flag_b.group(1)] = trim(m_flag_b.group(2))
 
             j = i + 1
             next_event_idx: Optional[int] = None
@@ -390,18 +451,72 @@ class FinderBaseDialect:
 
                 if (m := self.P_GET_MAG.search(s)):
                     get_mag = float(m.group(1))
+                if (m := self.P_GET_MAG_UNC.search(s)):
+                    get_mag_unc = float(m.group(1))
                 if (m := self.P_GET_LAT.search(s)):
                     get_lat = float(m.group(1))
+                if (m := self.P_GET_LAT_UNC.search(s)):
+                    get_lat_unc = float(m.group(1))
                 if (m := self.P_GET_LON.search(s)):
                     get_lon = float(m.group(1))
+                if (m := self.P_GET_LON_UNC.search(s)):
+                    get_lon_unc = float(m.group(1))
                 if (m := self.P_GET_DEP.search(s)):
                     get_dep = float(m.group(1))
+                if (m := self.P_GET_DEP_UNC.search(s)):
+                    get_dep_unc = float(m.group(1))
                 if (m := self.P_GET_LIK.search(s)):
                     get_lik = float(m.group(1))
                 if (m := self.P_GET_AZM.search(s)):
                     get_azm = float(m.group(1))
                 if (m := self.P_GET_OTM.search(s)):
                     get_otm = m.group(1)
+                if (m := self.P_GET_OTM_UNC.search(s)):
+                    try:
+                        get_otm_unc = float(m.group(1))
+                    except ValueError:
+                        get_otm_unc = None
+                if (m := self.P_GET_NUM_STATIONS.search(s)):
+                    try:
+                        get_num_stations = int(m.group(1))
+                    except ValueError:
+                        get_num_stations = None
+
+                # Parse SOLUTION COORDINATES key=value pairs
+                m_coords = self.P_SOL_COORDS.search(s)
+                if m_coords:
+                    tail = m_coords.group(1)
+                    for kv in tail.split(","):
+                        if "=" in kv:
+                            k, v = kv.split("=", 1)
+                            solution_fields[trim(k)] = trim(v)
+
+                # Parse SOLUTION RUPTURE line: extract Version and key=value pairs
+                m_rup_line = self.P_SOL_RUP_LINE.search(s)
+                if m_rup_line:
+                    tail = m_rup_line.group(1)
+                    # Version <N>
+                    mver = self.P_SOL_RUP_VERSION.search(s)
+                    if mver:
+                        version_by_event[event_id] = str(mver.group(1))
+                        solution_fields["Version"] = str(mver.group(1))
+                    # key=value pairs separated by commas
+                    for part in tail.split(","):
+                        part = part.strip()
+                        if "=" in part:
+                            k, v = part.split("=", 1)
+                            solution_fields[trim(k)] = trim(v)
+
+                # Parse SOLUTION TEMPLATE filename
+                m_tpl = self.P_SOL_TPL.search(s)
+                if m_tpl:
+                    solution_fields["Template file name"] = trim(m_tpl.group(1))
+
+                # Parse finder flags
+                # e.g., "process: initial finder_flags_new.event_continue = 1"
+                m_flag = re.search(r"process:\s*initial\s*finder_flags_new\.(\w+)\s*=\s*(\S+)", s)
+                if m_flag:
+                    finder_flags[m_flag.group(1)] = trim(m_flag.group(2))
 
                 if (m := self.P_GET_RUP.search(s)):
                     coords = self.P_RUP_PT.findall(m.group(1))
@@ -409,9 +524,9 @@ class FinderBaseDialect:
                         rupture_list.extend(
                             [
                                 FaultVertex(
-                                    lat=float(a),
-                                    lon=float(b),
-                                    depth=float(c),
+                                    lat=str(a),
+                                    lon=str(b),
+                                    depth=str(c),
                                 )
                                 for a, b, c in coords
                             ]
@@ -426,9 +541,9 @@ class FinderBaseDialect:
                             a, b, c = mc.groups()
                             rupture_list.append(
                                 FaultVertex(
-                                    lat=float(a),
-                                    lon=float(b),
-                                    depth=float(c),
+                                    lat=str(a),
+                                    lon=str(b),
+                                    depth=str(c),
                                 )
                             )
                             k += 1
@@ -475,12 +590,20 @@ class FinderBaseDialect:
 
             finder_details = self._build_finder_details(
                 get_mag=get_mag,
+                get_mag_unc=get_mag_unc,
                 get_lat=get_lat,
+                get_lat_unc=get_lat_unc,
                 get_lon=get_lon,
+                get_lon_unc=get_lon_unc,
                 get_dep=get_dep,
+                get_dep_unc=get_dep_unc,
                 get_lik=get_lik,
                 get_otm=get_otm,
+                get_otm_unc=get_otm_unc,
+                get_num_stations=get_num_stations,
                 get_azm=get_azm,
+                solution=solution_fields or None,
+                finder_flags=finder_flags or None,
             )
 
             pga_list: List[GMObs] = []
@@ -490,9 +613,9 @@ class FinderBaseDialect:
                         GMObs(
                             orig_sys="finder",
                             SNCL=str(sncl),
-                            value=float(pga),
-                            lat=float(lat),
-                            lon=float(lon),
+                            value=str(pga),
+                            lat=str(lat),
+                            lon=str(lon),
                             time=epoch_to_iso_z(str(t_epoch)),
                         )
                     )
