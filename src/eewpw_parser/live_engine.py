@@ -78,6 +78,8 @@ class LiveEngine:
             self._last_event_id = str(det.event_id)
             self._daily_writer.write_detection(det)
         for ann in anns:
+            if ann.pattern_id is not None and ann.pattern_id != "":
+                ann.pattern_id = f"{self.algo}/{self.dialect}:{ann.pattern_id}"
             self._update_time_bounds(ann.timestamp)
             eid = self._last_event_id or ""
             self._daily_writer.write_annotation(self._ann_profile, ann, eid)

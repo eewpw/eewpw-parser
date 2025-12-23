@@ -35,6 +35,9 @@ class VSParser:
 
         for p in files:
             d, a, extras = worker.parse_file(p)
+            for ann in a:
+                if ann.pattern_id is not None and ann.pattern_id != "":
+                    ann.pattern_id = f"vs/{self.dialect}:{ann.pattern_id}"
             dets_all.extend(d)
             ann_all.extend(a)
             per_file_extras.append(extras)
