@@ -123,7 +123,7 @@ class VSEventState:
         version = (
             int(self.update_number)
             if self.update_number is not None
-            else version_by_event.get(self.event_id or "", 0) + 1
+            else version_by_event.get(self.event_id or "", 0)
         )
         if self.event_id:
             version_by_event[self.event_id] = version

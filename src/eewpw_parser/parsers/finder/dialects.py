@@ -470,7 +470,7 @@ class FinderBaseDialect:
                 core_orig_time=core.orig_time,
             )
 
-            v = version_by_event.get(event_id, 0) + 1
+            v = version_by_event.get(event_id, 0)
             version_by_event[event_id] = v
 
             finder_details = self._build_finder_details(
@@ -796,7 +796,7 @@ class ShakeAlertFinderDialect(FinderBaseDialect):
                         )
                     )
 
-            version = int(version_attr) if version_attr.isdigit() else version_by_event.get(event_id, 0) + 1
+            version = int(version_attr) if version_attr.isdigit() else version_by_event.get(event_id, 0)
             version_by_event[event_id] = version
 
             timestamp_final = timestamp_attr or core.orig_time
@@ -1042,7 +1042,7 @@ class NativeFinderDialect(FinderBaseDialect):
                 core_orig_time=core.orig_time,
             )
 
-            v = version_by_event.get(event_id, 0) + 1
+            v = version_by_event.get(event_id, 0)
             version_by_event[event_id] = v
 
             finder_details = self._build_finder_details(
