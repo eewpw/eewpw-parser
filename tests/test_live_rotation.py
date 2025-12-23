@@ -34,7 +34,13 @@ class TestLiveRotation(unittest.TestCase):
                 fault_info=[],
                 gm_info={"pgv_obs": [], "pga_obs": []},
             )
-            det2 = det1.copy(update={"timestamp": "2025-11-25T00:00:01Z", "event_id": "EVT2", "core_info": det1.core_info.copy(update={"id": "EVT2"})})
+            det2 = det1.model_copy(
+                update={
+                    "timestamp": "2025-11-25T00:00:01Z",
+                    "event_id": "EVT2",
+                    "core_info": det1.core_info.model_copy(update={"id": "EVT2"}),
+                }
+            )
 
             writer.write_detection(det1)
             writer.write_detection(det2)

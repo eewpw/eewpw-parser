@@ -72,7 +72,7 @@ class JsonlStreamSink(BaseSink):
             "algo": self._algo,
             "dialect": self._dialect,
             "instance": self._instance,
-            "payload": det.dict(),
+            "payload": det.model_dump(),
         }
         self._write_line(rec)
 
@@ -83,7 +83,7 @@ class JsonlStreamSink(BaseSink):
             "dialect": self._dialect,
             "instance": self._instance,
             "profile": profile,
-            "payload": ann.dict(),
+            "payload": ann.model_dump(),
         }
         self._write_line(rec)
 
@@ -93,7 +93,7 @@ class JsonlStreamSink(BaseSink):
             "algo": self._algo,
             "dialect": self._dialect,
             "instance": self._instance,
-            "payload": meta.dict(),
+            "payload": meta.model_dump(),
         }
         self._write_line(rec)
         self._fh.close()

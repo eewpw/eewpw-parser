@@ -46,16 +46,16 @@ def test_gmcontour_pred_loads_and_preserves_shape():
     det = _base_detection(
         gm_info={"pgv_obs": [], "pga_obs": [], "gmcontour_pred": [contour]},
     )
-    doc = FinalDoc.parse_obj(_base_doc(det))
+    doc = FinalDoc.model_validate(_base_doc(det))
 
     parsed = doc.detections[0].gm_info.gmcontour_pred
     assert len(parsed) == 1
-    assert parsed[0].dict() == contour
+    assert parsed[0].model_dump() == contour
 
 
 def test_fault_info_empty_dict_coerces_to_list():
     det = _base_detection(fault_info={})
-    doc = FinalDoc.parse_obj(_base_doc(det))
+    doc = FinalDoc.model_validate(_base_doc(det))
     assert doc.detections[0].fault_info == []
 
 
@@ -63,7 +63,7 @@ def test_gmobs_orig_sys_falls_back_to_detection_origin():
     det = _base_detection(
         gm_info={"pgv_obs": [], "pga_obs": [{"SNCL": "STA", "value": "1.0", "lat": "0", "lon": "0", "time": "2020-01-01T00:00:00Z"}]},
     )
-    doc = FinalDoc.parse_obj(_base_doc(det))
+    doc = FinalDoc.model_validate(_base_doc(det))
     obs = doc.detections[0].gm_info.pga_obs[0]
     assert obs.orig_sys == "testsys"
 
@@ -72,7 +72,7 @@ def test_meta_schema_version_defaults_when_missing():
     det = _base_detection()
     payload = _base_doc(det)
     # meta.schema_version intentionally omitted
-    doc = FinalDoc.parse_obj(payload)
+    doc = FinalDoc.model_validate(payload)
     assert doc.meta.schema_version == SCHEMA_VERSION
 
 

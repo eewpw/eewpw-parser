@@ -48,13 +48,13 @@ class LiveWriter:
             print(f"[live-writer] {record_type} @ {ts} -> {self.path}", flush=True)
 
     def write_detection(self, det: Detection) -> None:
-        self._write_line("detection", det.dict())
+        self._write_line("detection", det.model_dump())
 
     def write_annotation(self, profile: str, ann: Annotation) -> None:
-        self._write_line("annotation", ann.dict(), profile=profile)
+        self._write_line("annotation", ann.model_dump(), profile=profile)
 
     def write_meta(self, meta: Meta) -> None:
-        self._write_line("meta", meta.dict())
+        self._write_line("meta", meta.model_dump())
 
     def close(self) -> None:
         try:
@@ -133,19 +133,19 @@ class DailyAlgoWriter:
         ts_iso = det.timestamp
         date_str = self._date_from_iso(ts_iso)
         self._ensure_handle(date_str)
-        self._write_line("detection", det.dict(), ts_iso, str(det.event_id), None)
+        self._write_line("detection", det.model_dump(), ts_iso, str(det.event_id), None)
 
     def write_annotation(self, profile: str, ann: Annotation, event_id: str) -> None:
         ts_iso = ann.timestamp
         date_str = self._date_from_iso(ts_iso)
         self._ensure_handle(date_str)
-        self._write_line("annotation", ann.dict(), ts_iso, event_id, profile)
+        self._write_line("annotation", ann.model_dump(), ts_iso, event_id, profile)
 
     def write_meta(self, meta: Meta) -> None:
         ts_iso = meta.started_at or meta.finished_at or to_iso_utc_z("1970-01-01T00:00:00Z")
         date_str = self._date_from_iso(ts_iso)
         self._ensure_handle(date_str)
-        self._write_line("meta", meta.dict(), ts_iso, "", None)
+        self._write_line("meta", meta.model_dump(), ts_iso, "", None)
 
     def close(self) -> None:
         if self._fh:

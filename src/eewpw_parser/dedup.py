@@ -11,7 +11,7 @@ def canonical_json(obj: BaseModel) -> str:
     Produce a deterministic JSON string for a Pydantic model instance.
     """
     return json.dumps(
-        obj.dict(),
+        obj.model_dump(),
         sort_keys=True,
         ensure_ascii=False,
         separators=(",", ":"),

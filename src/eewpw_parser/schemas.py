@@ -28,7 +28,7 @@ FinalDoc shape (JSON):
 """
 
 from typing import List, Dict, Any, Optional
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 
 # Current schema version, The version format is opaque. For now,
 # the adapted logic is "year.increment" (e.g., "2025.0", "2025.1").
@@ -127,7 +127,7 @@ class Detection(BaseModel):
     vs_details: Optional[VSDetails] = None
     extras: Dict[str, Any] = Field(default_factory=dict)
 
-    @validator("fault_info", pre=True)
+    @field_validator("fault_info", mode="before")
     def _coerce_fault_info(cls, v):
         # Back-compat: fault_info {} -> [].
         # Is fault_info null or None (from legacy files)? Coerce to [].
@@ -139,7 +139,7 @@ class Detection(BaseModel):
         # Otherwise, preserve as-is.
         return v
 
-    @validator("gm_info", pre=True)
+    @field_validator("gm_info", mode="before")
     def _coerce_gm_info(cls, v):
         # Back-compat: accept dict payloads and preserve unknown keys in extra.
         if v is None or v == {}:
@@ -154,10 +154,10 @@ class Detection(BaseModel):
             return gm_info
         return v
 
-    @validator("gm_info")
-    def _fill_obs_orig_sys(cls, v, values):
+    @field_validator("gm_info")
+    def _fill_obs_orig_sys(cls, v, info):
         # Consumer fallback: propagate detection orig_sys to missing GMObs.orig_sys.
-        det_orig_sys = values.get("orig_sys")
+        det_orig_sys = info.data.get("orig_sys")
         if det_orig_sys and isinstance(v, GMInfo):
             for obs_list in (v.pga_obs, v.pgv_obs, v.pgd_obs):
                 for obs in obs_list:
@@ -176,7 +176,7 @@ class Meta(BaseModel):
     extras: Dict[str, Any] = Field(default_factory=dict)
     stats_total: Dict[str, int] = Field(default_factory=dict)
 
-    @validator("schema_version", pre=True, always=True)
+    @field_validator("schema_version", mode="before")
     def _default_schema_version(cls, v):
         # Back-compat: fill missing schema_version on read.
         return v or SCHEMA_VERSION
