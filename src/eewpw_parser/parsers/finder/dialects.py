@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import List, Tuple, Dict, Any, Optional
+from dateutil import parser as dtp
 from eewpw_parser.schemas import (
     Annotation,
     Detection,
@@ -39,6 +40,8 @@ class FinderStreamState:
     absolute_line_counter: int = 0
     last_detection_index: Optional[int] = None
     last_detection_event_id: Optional[str] = None
+    legacy_seed_epoch: Optional[int] = None
+    legacy_update_index: int = 0
 
 
 class FinderBaseDialect:
@@ -254,6 +257,7 @@ class FinderBaseDialect:
         block_lines: List[str],
         emission_ts_iso: Optional[str],
         core_orig_time: str,
+        state: FinderStreamState,
     ) -> str:
         """
         Hook to decide which timestamp to use for a Detection.
@@ -267,6 +271,17 @@ class FinderBaseDialect:
         """
         return emission_ts_iso or core_orig_time
 
+    def _extract_event_id(self, line: str, state: FinderStreamState) -> Optional[str]:
+        m_eid = self.P_EVENT_ID.search(line)
+        if m_eid:
+            return m_eid.group(1)
+        return None
+
+    def _is_new_detection_line(self, line: str) -> bool:
+        return bool(self.P_EVENT_ID.search(line))
+
+    def _should_collect_inline_station_rows(self) -> bool:
+        return False
     def _parse_detections(self, lines: List[str]) -> List[Detection]:
         """
         Second pass over the log lines to extract detections.
@@ -292,7 +307,7 @@ class FinderBaseDialect:
         for idx, line in enumerate(lines):
             absolute_line = state.line_offset + idx + 1
             m = self.P_PREFIX_TS.search(line)
-            if not m:
+            if not m or m.lastindex is None or m.lastindex < 2:
                 continue
 
             ts_raw, msg = m.group(1), m.group(2)
@@ -343,6 +358,33 @@ class FinderBaseDialect:
         while i < len(lines):
             line = lines[i]
 
+            if self._should_collect_inline_station_rows():
+                mrow_single = self.P_STATION_ROW.findall(line)
+                if mrow_single:
+                    if pending_station_list is None:
+                        pending_station_list = []
+                    for match in mrow_single:
+                        sta, lat, lon, pga, t_epoch, include = (
+                            match[0],
+                            match[1],
+                            match[2],
+                            match[3],
+                            match[4],
+                            match[5],
+                        )
+                        if int(include) == 1:
+                            pending_station_list.append(
+                                (
+                                    float(lat),
+                                    float(lon),
+                                    trim(sta),
+                                    float(t_epoch),
+                                    float(pga),
+                                )
+                            )
+                    i += 1
+                    continue
+
             # Station block capture; if the block is incomplete and we're not
             # finalizing, keep it buffered for the next call.
             if self.P_STATION_HEADER.search(line):
@@ -383,12 +425,12 @@ class FinderBaseDialect:
                 i = j
                 continue
 
-            m_eid = self.P_EVENT_ID.search(line)
+            m_eid = self._extract_event_id(line, state)
             if not m_eid:
                 i += 1
                 continue
 
-            event_id = m_eid.group(1)
+            event_id = m_eid
 
             get_mag = get_lat = get_lon = get_dep = get_lik = get_otm = get_azm = None
             get_mag_unc = get_lat_unc = get_lon_unc = get_dep_unc = get_otm_unc = None
@@ -438,15 +480,50 @@ class FinderBaseDialect:
                 s = lines[j]
 
                 if self.P_STATION_HEADER.search(s):
+                    if self._should_collect_inline_station_rows():
+                        j += 1
+                        continue
                     break
 
-                if self.P_EVENT_ID.search(s):
+                if self._is_new_detection_line(s):
                     next_event_idx = j
                     break
 
+                if self._should_collect_inline_station_rows():
+                    mrow_inline = self.P_STATION_ROW.findall(s)
+                    if mrow_inline:
+                        if pending_station_list is None:
+                            pending_station_list = []
+                        for match in mrow_inline:
+                            sta, lat, lon, pga, t_epoch, include = (
+                                match[0],
+                                match[1],
+                                match[2],
+                                match[3],
+                                match[4],
+                                match[5],
+                            )
+                            if int(include) == 1:
+                                pending_station_list.append(
+                                    (
+                                        float(lat),
+                                        float(lon),
+                                        trim(sta),
+                                        float(t_epoch),
+                                        float(pga),
+                                    )
+                                )
+                        j += 1
+                        continue
+
+                m_event_line = self.P_EVENT_ID.search(s)
+                if m_event_line:
+                    event_id = m_event_line.group(1)
+                    state.last_detection_event_id = event_id
+
                 if not emission_ts_iso:
                     mp = self.P_PREFIX_TS.search(s)
-                    if mp:
+                    if mp and mp.lastindex:
                         emission_ts_iso = to_iso_utc_z(mp.group(1))
 
                 if (m := self.P_GET_MAG.search(s)):
@@ -583,6 +660,7 @@ class FinderBaseDialect:
                 block_lines=lines[i:block_end],
                 emission_ts_iso=emission_ts_iso,
                 core_orig_time=core.orig_time,
+                state=state,
             )
 
             v = version_by_event.get(event_id, 0)
@@ -1163,6 +1241,7 @@ class NativeFinderDialect(FinderBaseDialect):
                 block_lines=lines[i:block_end],
                 emission_ts_iso=emission_ts_iso,
                 core_orig_time=core.orig_time,
+                state=state,
             )
 
             v = version_by_event.get(event_id, 0)
@@ -1228,38 +1307,77 @@ class NativeFinderLegacyDialect(FinderBaseDialect):
     P_TS_EPOCH = re.compile(r"\bTimestamp\s*=\s*(\d+)")
     P_TS_PROCESS = re.compile(r"timestamp in process function\s*=\s*(\d+)")
 
+    def parse_file(self, path: str, algo: str = "finder", dialect: str = "native_finder_legacy") -> Tuple[List[Detection], List[Annotation], Dict[str, Any]]:
+        dets: List[Detection] = []
+        ann: List[Annotation] = []
+        state = FinderStreamState()
+
+        with open(path, "r", encoding="utf-8", errors="ignore") as f:
+            lines = f.readlines()
+            d, a, state = self.parse_stream(lines, state, finalize=True)
+            dets.extend(d)
+            ann.extend(a)
+
+        extras: Dict[str, Any] = {
+            "file": str(path),
+            "playback_time": state.playback_time_iso,
+            "started_at": state.file_start_ts_iso,
+            "finished_at": state.file_end_ts_iso,
+            "stats": {
+                "detections": len(dets),
+                "annotations": len(ann),
+            },
+        }
+
+        return dets, ann, extras
+
+    def _extract_event_id(self, line: str, state: FinderStreamState) -> Optional[str]:
+        if self.P_TS_EPOCH.search(line):
+            return state.last_detection_event_id or "0"
+        return None
+
+    def _is_new_detection_line(self, line: str) -> bool:
+        # Legacy logs rely on Timestamp cadence; event_id lines should not start new detections.
+        return bool(self.P_TS_EPOCH.search(line))
+
+    def _should_collect_inline_station_rows(self) -> bool:
+        return True
+
     def _pick_detection_timestamp(
         self,
         block_lines: List[str],
         emission_ts_iso: Optional[str],
         core_orig_time: str,
+        state: FinderStreamState,
     ) -> str:
         """
         For legacy native FinDer logs that do not have a wall-clock prefix per line.
 
         Strategy:
-        - If a wall-clock emission timestamp somehow exists, keep the base behaviour.
-        - Otherwise, look for epoch-style timestamps in the detection block:
-            * "Timestamp = 1723616759"
-            * "process: timestamp in process function = 1723616759"
-        - Convert the first epoch we find to ISO Z.
-        - If nothing is found, fall back to core_orig_time.
+        - Seed the epoch from the first available block timestamp (P_TS_EPOCH preferred, then P_TS_PROCESS).
+        - Subsequent detections increment the seed by 1s, independent of missing wall-clock prefixes.
         """
-        # 1) If the base machinery already found a wall-clock timestamp, use it.
-        if emission_ts_iso:
-            return emission_ts_iso
+        if state.legacy_seed_epoch is None:
+            seed_epoch: Optional[int] = None
+            for line in block_lines:
+                m = self.P_TS_EPOCH.search(line)
+                if m:
+                    seed_epoch = int(m.group(1))
+                    break
+            if seed_epoch is None:
+                for line in block_lines:
+                    m = self.P_TS_PROCESS.search(line)
+                    if m:
+                        seed_epoch = int(m.group(1))
+                        break
+            if seed_epoch is None:
+                try:
+                    seed_epoch = int(dtp.parse(core_orig_time).timestamp())
+                except Exception:
+                    seed_epoch = 0
+            state.legacy_seed_epoch = seed_epoch
+            state.legacy_update_index = 0
+        else:
+            state.legacy_update_index += 1
 
-        # 2) Look for a plain "Timestamp = <epoch>" first.
-        for line in block_lines:
-            m = self.P_TS_EPOCH.search(line)
-            if m:
-                return epoch_to_iso_z(m.group(1))
-
-        # 3) Then try "timestamp in process function = <epoch>".
-        for line in block_lines:
-            m = self.P_TS_PROCESS.search(line)
-            if m:
-                return epoch_to_iso_z(m.group(1))
-
-        # 4) Last resort: use the origin time we already have in the core info.
-        return core_orig_time
+        return epoch_to_iso_z(state.legacy_seed_epoch + state.legacy_update_index)
