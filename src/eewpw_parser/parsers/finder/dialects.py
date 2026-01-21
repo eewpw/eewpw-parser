@@ -282,6 +282,7 @@ class FinderBaseDialect:
 
     def _should_collect_inline_station_rows(self) -> bool:
         return False
+    
     def _parse_detections(self, lines: List[str]) -> List[Detection]:
         """
         Second pass over the log lines to extract detections.
@@ -1339,9 +1340,6 @@ class NativeFinderLegacyDialect(FinderBaseDialect):
     def _is_new_detection_line(self, line: str) -> bool:
         # Legacy logs rely on Timestamp cadence; event_id lines should not start new detections.
         return bool(self.P_TS_EPOCH.search(line))
-
-    def _should_collect_inline_station_rows(self) -> bool:
-        return True
 
     def _pick_detection_timestamp(
         self,
