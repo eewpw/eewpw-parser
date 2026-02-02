@@ -10,7 +10,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from eewpw_parser.parsers.finder.finder_parser import FinderParser  # noqa: E402
 
 
-LOG_PATH = ROOT / "example-data" / "finder_legacy" / "log_20140824_southnapa"
+LOG_PATH = ROOT / "example-log-files" / "finder_legacy" / "log_20140824_southnapa"
 
 
 def _run_cmd(cmd: str) -> str:
@@ -26,6 +26,8 @@ def _iso_to_epoch(ts: str) -> int:
 
 class TestFinderLegacyShellCounts(unittest.TestCase):
     def test_counts_align_with_shell_markers(self):
+        if not LOG_PATH.exists():
+            self.skipTest(f"missing local log file: {LOG_PATH}")
         expected_det = int(_run_cmd(f"grep -c '^Timestamp =' {LOG_PATH}"))
         first_line = _run_cmd(f"grep -m1 '^Timestamp =' {LOG_PATH}")
         seed_epoch = int(first_line.split()[-1])

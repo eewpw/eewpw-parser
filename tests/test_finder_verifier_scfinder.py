@@ -12,11 +12,13 @@ from eewpw_parser.verifiers.finder_scfinder import (  # noqa: E402
 )
 
 
-SAMPLE_LOG = ROOT / "example-data" / "finder_scfinder" / "scfinder_Elm2020" / "scfinder.log"
+SAMPLE_LOG = ROOT / "example-log-files" / "finder_scfinder" / "scfinder_Elm2020" / "scfinder.log"
 
 
 class TestFinderVerifierSCFinder(unittest.TestCase):
     def test_finder_verifier_on_example_log_passes(self):
+        if not SAMPLE_LOG.exists():
+            self.skipTest(f"missing local log file: {SAMPLE_LOG}")
         parser = FinderParser({"dialect": "scfinder"})
         doc = parser.parse([str(SAMPLE_LOG)])
         oracle = extract_finder_oracle_from_log(str(SAMPLE_LOG))

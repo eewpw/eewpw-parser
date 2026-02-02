@@ -1,6 +1,6 @@
 # VS Parser (design)
 
-Target log style: SeisComP `scvsmag` processing/info logs (example: `example-data/vs_scvsmag/scvsmag_Elm2020/scvsmag-processing-info.log`). Each line has a prefix timestamp `[processing/info/VsMagnitude]` followed by structured key/value phrases.
+Target log style: SeisComP `scvsmag` processing/info logs (example: `example-log-files/vs_scvsmag/scvsmag_Elm2020/scvsmag-processing-info.log`). Each line has a prefix timestamp `[processing/info/VsMagnitude]` followed by structured key/value phrases.
 
 ## Expected patterns
 

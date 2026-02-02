@@ -9,11 +9,13 @@ from tests.helpers.shell_counts import (
 )
 
 ROOT = Path(__file__).resolve().parent.parent
-SAMPLE_LOG = ROOT / "example-data" / "vs_scvsmag" / "scvsmag_Elm2020" / "scvsmag-processing-info.log"
+SAMPLE_LOG = ROOT / "example-log-files" / "vs_scvsmag" / "scvsmag_Elm2020" / "scvsmag-processing-info.log"
 
 
 class TestVSShellDerivedCounts(unittest.TestCase):
     def test_shell_counts_vs(self):
+        if not SAMPLE_LOG.exists():
+            self.skipTest(f"missing local log file: {SAMPLE_LOG}")
         spec = {
             "det_update_blocks": "grep -F -c 'Start logging for event:' {log}",
             "station_blocks": "grep -F -c 'Sensor:' {log}",

@@ -10,17 +10,21 @@ from eewpw_parser.parsers.vs.vs_parser import VSParser  # noqa: E402
 from eewpw_parser.verifiers.vs_scvsmag import extract_vs_oracle_from_log, verify_vs_scvsmag  # noqa: E402
 
 
-SAMPLE_LOG = ROOT / "example-data" / "vs_scvsmag" / "scvsmag_Elm2020" / "scvsmag-processing-info.log"
+SAMPLE_LOG = ROOT / "example-log-files" / "vs_scvsmag" / "scvsmag_Elm2020" / "scvsmag-processing-info.log"
 
 
 class TestVSVerifier(unittest.TestCase):
     def test_vs_verifier_on_example_log_pass(self):
+        if not SAMPLE_LOG.exists():
+            self.skipTest(f"missing local log file: {SAMPLE_LOG}")
         parser = VSParser({"dialect": "scvsmag"})
         doc = parser.parse([str(SAMPLE_LOG)])
         oracle = extract_vs_oracle_from_log(str(SAMPLE_LOG))
         verify_vs_scvsmag(doc, oracle)
 
     def test_vs_verifier_missing_pgv_fails(self):
+        if not SAMPLE_LOG.exists():
+            self.skipTest(f"missing local log file: {SAMPLE_LOG}")
         parser = VSParser({"dialect": "scvsmag"})
         doc = parser.parse([str(SAMPLE_LOG)])
         doc_bad = copy.deepcopy(doc)
@@ -31,6 +35,8 @@ class TestVSVerifier(unittest.TestCase):
         self.assertIn("observation", str(ctx.exception))
 
     def test_vs_verifier_component_mismatch_fails(self):
+        if not SAMPLE_LOG.exists():
+            self.skipTest(f"missing local log file: {SAMPLE_LOG}")
         parser = VSParser({"dialect": "scvsmag"})
         doc = parser.parse([str(SAMPLE_LOG)])
         doc_bad = copy.deepcopy(doc)
@@ -43,6 +49,8 @@ class TestVSVerifier(unittest.TestCase):
         self.assertIn("observation", str(ctx.exception))
 
     def test_vs_verifier_timestamp_mismatch_fails(self):
+        if not SAMPLE_LOG.exists():
+            self.skipTest(f"missing local log file: {SAMPLE_LOG}")
         parser = VSParser({"dialect": "scvsmag"})
         doc = parser.parse([str(SAMPLE_LOG)])
         doc_bad = copy.deepcopy(doc)

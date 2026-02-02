@@ -8,10 +8,12 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from eewpw_parser.parsers.finder.finder_parser import FinderParser
 
-EXAMPLE_LOG = ROOT / "example-data" / "finder_scfinder" / "scfinder_Elm2020" / "scfinder.log"
+EXAMPLE_LOG = ROOT / "example-log-files" / "finder_scfinder" / "scfinder_Elm2020" / "scfinder.log"
 
 
 def _parse_scfinder():
+    if not EXAMPLE_LOG.exists():
+        raise unittest.SkipTest(f"missing local log file: {EXAMPLE_LOG}")
     cfg = {"dialect": "scfinder", "verbose": False}
     parser = FinderParser(cfg)
     doc = parser.parse([str(EXAMPLE_LOG)])

@@ -9,11 +9,13 @@ from tests.helpers.shell_counts import (
 )
 
 ROOT = Path(__file__).resolve().parent.parent
-SAMPLE_LOG = ROOT / "example-data" / "finder_scfinder" / "scfinder_Elm2020" / "scfinder.log"
+SAMPLE_LOG = ROOT / "example-log-files" / "finder_scfinder" / "scfinder_Elm2020" / "scfinder.log"
 
 
 class TestFinderShellDerivedCounts(unittest.TestCase):
     def test_shell_counts_finder(self):
+        if not SAMPLE_LOG.exists():
+            self.skipTest(f"missing local log file: {SAMPLE_LOG}")
         with tempfile.TemporaryDirectory() as td:
             out_path = Path(td) / "out.json"
             expected = compute_finder_expected_counts(SAMPLE_LOG)

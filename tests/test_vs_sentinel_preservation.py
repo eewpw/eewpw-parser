@@ -10,11 +10,13 @@ from eewpw_parser.parsers.vs.vs_parser import VSParser  # noqa: E402
 from eewpw_parser.verifiers.vs_scvsmag import extract_vs_oracle_from_log, verify_vs_scvsmag  # noqa: E402
 
 
-SAMPLE_LOG = ROOT / "example-data" / "vs_scvsmag" / "scvsmag_Elm2020" / "scvsmag-processing-info.log"
+SAMPLE_LOG = ROOT / "example-log-files" / "vs_scvsmag" / "scvsmag_Elm2020" / "scvsmag-processing-info.log"
 
 
 class TestVSSentinelPreservation(unittest.TestCase):
     def test_sentinel_observation_present_and_verified(self):
+        if not SAMPLE_LOG.exists():
+            self.skipTest(f"missing local log file: {SAMPLE_LOG}")
         parser = VSParser({"dialect": "scvsmag"})
         doc = parser.parse([str(SAMPLE_LOG)])
 
@@ -30,6 +32,8 @@ class TestVSSentinelPreservation(unittest.TestCase):
         verify_vs_scvsmag(doc, oracle)
 
     def test_missing_sentinel_fails_verifier(self):
+        if not SAMPLE_LOG.exists():
+            self.skipTest(f"missing local log file: {SAMPLE_LOG}")
         parser = VSParser({"dialect": "scvsmag"})
         doc = parser.parse([str(SAMPLE_LOG)])
         doc_bad = copy.deepcopy(doc)
