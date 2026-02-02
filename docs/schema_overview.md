@@ -112,6 +112,8 @@ flowchart TD
 ```
 
 ### Level 2: vs_details
+VS‑specific details like `summary`, `stations_not_used`, plus any additional VS‑only fields under `vs_details.extra`.
+
 ```mermaid
 flowchart TD
     V[vs_details] --> V1[summary: Map<string, string>]
@@ -120,6 +122,7 @@ flowchart TD
 ```
 
 ### Level 2: finder_details
+FinDer‑specific details like `solution_metrics`, `origin_time_epoch` (optional), `solution`, `finder_flags` (optional), plus any additional Finder‑only fields under `finder_details.extra`.
 ```mermaid
 flowchart TD
     X[finder_details] --> X1[solution_metrics: Map<string, string>]
