@@ -64,29 +64,65 @@ flowchart TD
     D[Detection]
     D --> H[Header Fields<br/>timestamp, event_id, category, instance, orig_sys, version]
     D --> C[core_info: DetectionCore]
-    D --> G[gm_info: GMInfo (default empty)]
-    D --> F[fault_info: FaultVertex List (default empty)]
+    D --> G[gm_info: GMInfo<br/>default empty]
+    D --> F[fault_info: FaultVertex List<br/>default empty]
     D --> V[vs_details::optional]
     D --> X[finder_details::optional]
     D --> E[extra: Map<string, any>]
+```
 
-    C --> C1[id, mag, lat, lon, depth, orig_time]
-    C --> C2[likelihood?]
-    C --> C3[vs_median_single_station_mag?]
+### Level 2: Header Fields
+```mermaid
+flowchart TD
+    H[Header Fields] --> H1[timestamp]
+    H --> H2[event_id]
+    H --> H3[category]
+    H --> H4[instance]
+    H --> H5[orig_sys]
+    H --> H6[version]
+```
 
-    G --> G1[pga_obs: GMObs List]
+### Level 2: core_info
+```mermaid
+flowchart TD
+    C[core_info: DetectionCore] --> C1[id]
+    C --> C2[mag]
+    C --> C3[lat]
+    C --> C4[lon]
+    C --> C5[depth]
+    C --> C6[orig_time]
+    C --> C7[likelihood?]
+    C --> C8[vs_median_single_station_mag?]
+```
+
+### Level 2: gm_info
+```mermaid
+flowchart TD
+    G[gm_info: GMInfo] --> G1[pga_obs: GMObs List]
     G --> G2[pgv_obs: GMObs List]
     G --> G3[pgd_obs: GMObs List]
     G --> G4[gmcontour_pred: MMIContour List]
     G --> G5[extra]
+```
 
-    F --> FV[FaultVertex<br/>lat, lon, depth?]
+### Level 2: fault_info
+```mermaid
+flowchart TD
+    F[fault_info] --> FV[FaultVertex<br/>lat, lon, depth?]
+```
 
-    V --> V1[summary: Map<string, string>]
+### Level 2: vs_details
+```mermaid
+flowchart TD
+    V[vs_details] --> V1[summary: Map<string, string>]
     V --> V2[stations_not_used: string List]
     V --> V3[extra]
+```
 
-    X --> X1[solution_metrics: Map<string, string>]
+### Level 2: finder_details
+```mermaid
+flowchart TD
+    X[finder_details] --> X1[solution_metrics: Map<string, string>]
     X --> X2[origin_time_epoch?]
     X --> X3[solution: Map<string, string>]
     X --> X4[finder_flags?: Map<string, string>]
