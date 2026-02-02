@@ -55,7 +55,7 @@ These three blocks exist to separate responsibilities: `meta` (run context), `an
 - `annotations` answer “what interesting things happened over time?” (profile/regex hints; optional).
 - `detections` answer “what did the algorithm decide?” (solutions/updates; essential payload).
 - Annotations are optional. `gm_info` and `fault_info` default to empty containers when omitted. Detections are essential.
-- The only extension point is `extra` (singular). Any `extras` key is invalid and should fail validation.
+- The only extension point is `extra` (singular). Any other extension key is invalid and should fail validation.
 - The schema is frozen (for now) and backward compatible; legacy JSON/JSONL must still load. `meta.schema_version` is stamped when created and defaults to the current `SCHEMA_VERSION` (2025.1) if missing on read.
 
 ## Detection Breakdown
@@ -129,8 +129,20 @@ flowchart TD
     X --> X2[origin_time_epoch?]
     X --> X3[solution: Map<string, string>]
     X --> X4[finder_flags?: Map<string, string>]
-    X --> X5[extra]
+    X --> X5[template_id?]
+    X --> X6[centroid?]
+    X --> X7[rupture_list?]
+    X --> X8[azimuth_list?/length_list?]
+    X --> X9[azimuth_llk_list?/length_llk_list?]
+    X --> X10[extra]
 ```
+FinderDetails also carries optional Finder block outputs:
+- `template_id`: string from `Template_id = ...` (empty string allowed when header present).
+- `centroid`: `FaultVertex` from `Finder centroid = ...` and does not override `core_info`.
+- `rupture_list`: list of `FaultVertex` from `Finder rupture list = ...`.
+- `azimuth_list` / `length_list`: list of `(azimuth|length, value)` pairs.
+- `azimuth_llk_list` / `length_llk_list`: list of `(azimuth|length, llk)` pairs.
+- `finder_details.extra["pdf"]`: map from normalized pdf name to rows `{lat, lon, value}`; omitted when no rows are present.
 Header + `core_info` form the required spine. Optional regions capture ground motion, rupture geometry, and algo-specific details. Back-compat behaviors: `fault_info` of `None` or `{}` becomes `[]`; `gm_info` of `None` or `{}` yields an empty `GMInfo`; dict payloads keep unknown keys under `gm_info.extra`; `GMObs.orig_sys` is filled from detection `orig_sys` when missing. `fault_info` carries rupture vertices for FinDer when a rupture is produced; other algorithms leave it empty.
 
 ## Ground Motion: Station-Centric by Design

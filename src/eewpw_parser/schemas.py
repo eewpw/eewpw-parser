@@ -78,6 +78,26 @@ class FaultVertex(BaseModel):
     depth: Optional[str] = None
 
 
+class FinderAzimuthValue(BaseModel):
+    azimuth: str
+    value: str
+
+
+class FinderLengthValue(BaseModel):
+    length: str
+    value: str
+
+
+class FinderAzimuthLLK(BaseModel):
+    azimuth: str
+    llk: str
+
+
+class FinderLengthLLK(BaseModel):
+    length: str
+    llk: str
+
+
 class MMIContour(BaseModel):
     """Predicted MMI contour; polygon stored as provided (typically [[lon, lat], ...]) 
     and not normalized."""
@@ -92,6 +112,13 @@ class FinderDetails(BaseModel):
     origin_time_epoch: Optional[str] = None
     solution: Dict[str, str] = Field(default_factory=dict)
     finder_flags: Optional[Dict[str, str]] = None
+    template_id: Optional[str] = None
+    centroid: Optional[FaultVertex] = None
+    rupture_list: Optional[List[FaultVertex]] = None
+    azimuth_list: Optional[List[FinderAzimuthValue]] = None
+    length_list: Optional[List[FinderLengthValue]] = None
+    azimuth_llk_list: Optional[List[FinderAzimuthLLK]] = None
+    length_llk_list: Optional[List[FinderLengthLLK]] = None
     extra: Dict[str, Any] = Field(default_factory=dict)
 
 

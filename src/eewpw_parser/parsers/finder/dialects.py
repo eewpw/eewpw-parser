@@ -11,7 +11,11 @@ from eewpw_parser.schemas import (
     Detection,
     DetectionCore,
     FaultVertex,
+    FinderAzimuthLLK,
+    FinderAzimuthValue,
     FinderDetails,
+    FinderLengthLLK,
+    FinderLengthValue,
     GMInfo,
     GMObs,
 )
@@ -80,6 +84,19 @@ class FinderBaseDialect:
     P_STATION_HEADER = re.compile(r"The stations that exceeded the minimum threshold|Stations with PGA above the min threshold")
     P_STATION_ROW = re.compile(r"\s*([^\s,]+)\s*([-\d.]+)\/([-\d.]+)\s*--\s*([-\d.eE+]+)\s*(\d+\.\d*)\s*include\s*=\s*(\d)")
 
+    # Finder block headers (template/centroid/lists/pdf)
+    P_TEMPLATE_ID = re.compile(r"^Template_id\s*=\s*(.*)$")
+    P_FINDER_CENTROID = re.compile(
+        r"^Finder\s+centroid\s*=\s*([-\d.+eE]+)\s*/\s*([-\d.+eE]+)(?:\s*/\s*([-\d.+eE]+))?\s*$"
+    )
+    P_FINDER_LIST_HEADER = re.compile(
+        r"^Finder\s+(rupture|azimuth|length|azimuth\s+llk|length\s+llk)\s+list\s*=\s*(.*)$"
+    )
+    P_FINDER_PDF_HEADER = re.compile(r"^Finder\s+(.*?)\s+pdf\s*=\s*(.*)$")
+    P_FINDER_HEADER = re.compile(r"^Finder .*=")
+    P_TEMPLATE_HEADER = re.compile(r"^Template_id\s*=")
+    P_NUMERIC = re.compile(r"^[-+]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?$")
+
     # Log line indicating playback start (first timestamp)
     START_PLAYBACK_RE = re.compile(r"^(\d{4}[/\-]\d{2}[/\-]\d{2}\s+\d{2}:\d{2}:\d{2})\s+\[notice/Application\]\s+Starting scfinder")
 
@@ -121,6 +138,136 @@ class FinderBaseDialect:
             self._profile_cache = load_profile(self.PROFILE_NAME)
         return self._profile_cache
 
+    def _normalize_message(self, line: str) -> str:
+        if self.P_PREFIX_TS:
+            m = self.P_PREFIX_TS.search(line)
+            if m and m.lastindex is not None and m.lastindex >= 2:
+                return m.group(2).strip()
+        return line.strip()
+
+    def _is_numeric(self, text: str) -> bool:
+        return bool(self.P_NUMERIC.match(text))
+
+    def _parse_lat_lon(self, text: str) -> Optional[Tuple[str, str]]:
+        parts = [p.strip() for p in text.split("/")]
+        if len(parts) != 2:
+            return None
+        if not all(self._is_numeric(p) for p in parts):
+            return None
+        return parts[0], parts[1]
+
+    def _parse_lat_lon_depth(self, text: str) -> Optional[Tuple[str, str, Optional[str]]]:
+        parts = [p.strip() for p in text.split("/")]
+        if len(parts) not in (2, 3):
+            return None
+        if not all(self._is_numeric(p) for p in parts):
+            return None
+        depth = parts[2] if len(parts) == 3 else None
+        return parts[0], parts[1], depth
+
+    def _parse_numeric_pair(self, text: str) -> Optional[Tuple[str, str]]:
+        parts = [p.strip() for p in text.split(",")]
+        if len(parts) != 2:
+            return None
+        if not all(self._is_numeric(p) for p in parts):
+            return None
+        return parts[0], parts[1]
+
+    def _consume_finder_list_block(
+        self,
+        lines: List[str],
+        start_idx: int,
+        list_kind: str,
+        header_tail: str,
+    ) -> Tuple[List[Any], int]:
+        rows: List[Any] = []
+
+        header_tail = header_tail.strip()
+        if header_tail:
+            row = self._parse_finder_list_row(list_kind, header_tail)
+            if row is not None:
+                rows.append(row)
+
+        k = start_idx + 1
+        while k < len(lines):
+            msg = self._normalize_message(lines[k]).strip()
+            if msg == "":
+                break
+            if self.P_FINDER_HEADER.match(msg) or self.P_TEMPLATE_HEADER.match(msg):
+                break
+            row = self._parse_finder_list_row(list_kind, msg)
+            if row is None:
+                break
+            rows.append(row)
+            k += 1
+        return rows, k
+
+    def _parse_finder_list_row(self, list_kind: str, msg: str) -> Optional[Any]:
+        list_kind = " ".join(list_kind.split())
+        if list_kind == "rupture":
+            parsed = self._parse_lat_lon_depth(msg)
+            if not parsed:
+                return None
+            lat, lon, depth = parsed
+            return FaultVertex(lat=str(lat), lon=str(lon), depth=str(depth) if depth is not None else None)
+
+        parsed = self._parse_numeric_pair(msg)
+        if not parsed:
+            return None
+        first, second = parsed
+
+        if list_kind == "azimuth":
+            return FinderAzimuthValue(azimuth=str(first), value=str(second))
+        if list_kind == "length":
+            return FinderLengthValue(length=str(first), value=str(second))
+        if list_kind == "azimuth llk":
+            return FinderAzimuthLLK(azimuth=str(first), llk=str(second))
+        if list_kind == "length llk":
+            return FinderLengthLLK(length=str(first), llk=str(second))
+
+        return None
+
+    def _consume_finder_pdf_block(
+        self,
+        lines: List[str],
+        start_idx: int,
+        header_tail: str,
+    ) -> Tuple[List[Dict[str, str]], int]:
+        rows: List[Dict[str, str]] = []
+
+        header_tail = header_tail.strip()
+        if header_tail:
+            row = self._parse_finder_pdf_row(header_tail)
+            if row is not None:
+                rows.append(row)
+
+        k = start_idx + 1
+        while k < len(lines):
+            msg = self._normalize_message(lines[k]).strip()
+            if msg == "":
+                break
+            if self.P_FINDER_HEADER.match(msg) or self.P_TEMPLATE_HEADER.match(msg):
+                break
+            row = self._parse_finder_pdf_row(msg)
+            if row is None:
+                break
+            rows.append(row)
+            k += 1
+        return rows, k
+
+    def _parse_finder_pdf_row(self, msg: str) -> Optional[Dict[str, str]]:
+        if "," not in msg:
+            return None
+        left, right = msg.split(",", 1)
+        latlon = self._parse_lat_lon(left.strip())
+        if not latlon:
+            return None
+        value = right.strip()
+        if not self._is_numeric(value):
+            return None
+        lat, lon = latlon
+        return {"lat": str(lat), "lon": str(lon), "value": str(value)}
+
     def _build_finder_details(
         self,
         *,
@@ -139,6 +286,14 @@ class FinderBaseDialect:
         get_azm: Optional[float] = None,
         solution: Optional[Dict[str, str]] = None,
         finder_flags: Optional[Dict[str, str]] = None,
+        template_id: Optional[str] = None,
+        centroid: Optional[FaultVertex] = None,
+        rupture_list: Optional[List[FaultVertex]] = None,
+        azimuth_list: Optional[List[FinderAzimuthValue]] = None,
+        length_list: Optional[List[FinderLengthValue]] = None,
+        azimuth_llk_list: Optional[List[FinderAzimuthLLK]] = None,
+        length_llk_list: Optional[List[FinderLengthLLK]] = None,
+        extra: Optional[Dict[str, Any]] = None,
     ) -> Optional[FinderDetails]:
         """
         Normalize FinDer-derived metrics to stable snake_case keys.
@@ -169,7 +324,18 @@ class FinderBaseDialect:
         origin_time_epoch = str(get_otm) if get_otm is not None else None
         solution = solution or {}
 
-        if not solution_metrics and origin_time_epoch is None and not solution and not finder_flags:
+        has_finder_blocks = (
+            template_id is not None
+            or centroid is not None
+            or rupture_list is not None
+            or azimuth_list is not None
+            or length_list is not None
+            or azimuth_llk_list is not None
+            or length_llk_list is not None
+            or (extra is not None and len(extra) > 0)
+        )
+
+        if not solution_metrics and origin_time_epoch is None and not solution and not finder_flags and not has_finder_blocks:
             return None
 
         return FinderDetails(
@@ -177,6 +343,14 @@ class FinderBaseDialect:
             origin_time_epoch=origin_time_epoch,
             solution=solution,
             finder_flags=finder_flags,
+            template_id=template_id,
+            centroid=centroid,
+            rupture_list=rupture_list,
+            azimuth_list=azimuth_list,
+            length_list=length_list,
+            azimuth_llk_list=azimuth_llk_list,
+            length_llk_list=length_llk_list,
+            extra=extra or {},
         )
 
 
@@ -437,6 +611,14 @@ class FinderBaseDialect:
             get_mag_unc = get_lat_unc = get_lon_unc = get_dep_unc = get_otm_unc = None
             get_num_stations: Optional[int] = None
             rupture_list: List[FaultVertex] = []
+            template_id: Optional[str] = None
+            centroid: Optional[FaultVertex] = None
+            finder_rupture_list: Optional[List[FaultVertex]] = None
+            finder_azimuth_list: Optional[List[FinderAzimuthValue]] = None
+            finder_length_list: Optional[List[FinderLengthValue]] = None
+            finder_azimuth_llk_list: Optional[List[FinderAzimuthLLK]] = None
+            finder_length_llk_list: Optional[List[FinderLengthLLK]] = None
+            finder_pdf: Dict[str, List[Dict[str, str]]] = {}
             emission_ts_iso: Optional[str] = None
             solution_fields: Dict[str, str] = {}
             finder_flags: Dict[str, str] = {}
@@ -526,6 +708,50 @@ class FinderBaseDialect:
                     mp = self.P_PREFIX_TS.search(s)
                     if mp and mp.lastindex:
                         emission_ts_iso = to_iso_utc_z(mp.group(1))
+
+                msg = self._normalize_message(s)
+                if msg:
+                    m_tpl_id = self.P_TEMPLATE_ID.match(msg)
+                    if m_tpl_id:
+                        template_id = (m_tpl_id.group(1) or "").strip()
+
+                    m_centroid = self.P_FINDER_CENTROID.match(msg)
+                    if m_centroid:
+                        lat, lon, dep = m_centroid.group(1), m_centroid.group(2), m_centroid.group(3)
+                        centroid = FaultVertex(
+                            lat=str(lat),
+                            lon=str(lon),
+                            depth=str(dep) if dep is not None else None,
+                        )
+
+                    m_list = self.P_FINDER_LIST_HEADER.match(msg)
+                    if m_list:
+                        list_kind = " ".join(m_list.group(1).split())
+                        header_tail = m_list.group(2) or ""
+                        rows, next_idx = self._consume_finder_list_block(lines, j, list_kind, header_tail)
+                        if list_kind == "rupture":
+                            finder_rupture_list = rows
+                        elif list_kind == "azimuth":
+                            finder_azimuth_list = rows
+                        elif list_kind == "length":
+                            finder_length_list = rows
+                        elif list_kind == "azimuth llk":
+                            finder_azimuth_llk_list = rows
+                        elif list_kind == "length llk":
+                            finder_length_llk_list = rows
+                        j = next_idx
+                        continue
+
+                    m_pdf = self.P_FINDER_PDF_HEADER.match(msg)
+                    if m_pdf:
+                        key_raw = (m_pdf.group(1) or "").strip()
+                        header_tail = m_pdf.group(2) or ""
+                        key = "_".join(key_raw.lower().split())
+                        rows, next_idx = self._consume_finder_pdf_block(lines, j, header_tail)
+                        if rows:
+                            finder_pdf[key] = rows
+                        j = next_idx
+                        continue
 
                 if (m := self.P_GET_MAG.search(s)):
                     get_mag = float(m.group(1))
@@ -667,6 +893,10 @@ class FinderBaseDialect:
             v = version_by_event.get(event_id, 0)
             version_by_event[event_id] = v
 
+            finder_extra: Dict[str, Any] = {}
+            if finder_pdf:
+                finder_extra["pdf"] = finder_pdf
+
             finder_details = self._build_finder_details(
                 get_mag=get_mag,
                 get_mag_unc=get_mag_unc,
@@ -683,6 +913,14 @@ class FinderBaseDialect:
                 get_azm=get_azm,
                 solution=solution_fields or None,
                 finder_flags=finder_flags or None,
+                template_id=template_id,
+                centroid=centroid,
+                rupture_list=finder_rupture_list,
+                azimuth_list=finder_azimuth_list,
+                length_list=finder_length_list,
+                azimuth_llk_list=finder_azimuth_llk_list,
+                length_llk_list=finder_length_llk_list,
+                extra=finder_extra or None,
             )
 
             pga_list: List[GMObs] = []
@@ -1141,6 +1379,14 @@ class NativeFinderDialect(FinderBaseDialect):
 
             get_mag = get_lat = get_lon = get_dep = get_lik = get_otm = get_azm = None
             rupture_list: List[FaultVertex] = []
+            template_id: Optional[str] = None
+            centroid: Optional[FaultVertex] = None
+            finder_rupture_list: Optional[List[FaultVertex]] = None
+            finder_azimuth_list: Optional[List[FinderAzimuthValue]] = None
+            finder_length_list: Optional[List[FinderLengthValue]] = None
+            finder_azimuth_llk_list: Optional[List[FinderAzimuthLLK]] = None
+            finder_length_llk_list: Optional[List[FinderLengthLLK]] = None
+            finder_pdf: Dict[str, List[Dict[str, str]]] = {}
             emission_ts_iso: Optional[str] = None
 
             j = i + 1
@@ -1159,6 +1405,50 @@ class NativeFinderDialect(FinderBaseDialect):
                     mp = self.P_PREFIX_TS.search(s)
                     if mp:
                         emission_ts_iso = to_iso_utc_z(mp.group(1))
+
+                msg = self._normalize_message(s)
+                if msg:
+                    m_tpl_id = self.P_TEMPLATE_ID.match(msg)
+                    if m_tpl_id:
+                        template_id = (m_tpl_id.group(1) or "").strip()
+
+                    m_centroid = self.P_FINDER_CENTROID.match(msg)
+                    if m_centroid:
+                        lat, lon, dep = m_centroid.group(1), m_centroid.group(2), m_centroid.group(3)
+                        centroid = FaultVertex(
+                            lat=str(lat),
+                            lon=str(lon),
+                            depth=str(dep) if dep is not None else None,
+                        )
+
+                    m_list = self.P_FINDER_LIST_HEADER.match(msg)
+                    if m_list:
+                        list_kind = " ".join(m_list.group(1).split())
+                        header_tail = m_list.group(2) or ""
+                        rows, next_idx = self._consume_finder_list_block(lines, j, list_kind, header_tail)
+                        if list_kind == "rupture":
+                            finder_rupture_list = rows
+                        elif list_kind == "azimuth":
+                            finder_azimuth_list = rows
+                        elif list_kind == "length":
+                            finder_length_list = rows
+                        elif list_kind == "azimuth llk":
+                            finder_azimuth_llk_list = rows
+                        elif list_kind == "length llk":
+                            finder_length_llk_list = rows
+                        j = next_idx
+                        continue
+
+                    m_pdf = self.P_FINDER_PDF_HEADER.match(msg)
+                    if m_pdf:
+                        key_raw = (m_pdf.group(1) or "").strip()
+                        header_tail = m_pdf.group(2) or ""
+                        key = "_".join(key_raw.lower().split())
+                        rows, next_idx = self._consume_finder_pdf_block(lines, j, header_tail)
+                        if rows:
+                            finder_pdf[key] = rows
+                        j = next_idx
+                        continue
 
                 if (m := self.P_GET_MAG.search(s)):
                     get_mag = float(m.group(1))
@@ -1248,6 +1538,10 @@ class NativeFinderDialect(FinderBaseDialect):
             v = version_by_event.get(event_id, 0)
             version_by_event[event_id] = v
 
+            finder_extra: Dict[str, Any] = {}
+            if finder_pdf:
+                finder_extra["pdf"] = finder_pdf
+
             finder_details = self._build_finder_details(
                 get_mag=get_mag,
                 get_lat=get_lat,
@@ -1256,6 +1550,14 @@ class NativeFinderDialect(FinderBaseDialect):
                 get_lik=get_lik,
                 get_otm=get_otm,
                 get_azm=get_azm,
+                template_id=template_id,
+                centroid=centroid,
+                rupture_list=finder_rupture_list,
+                azimuth_list=finder_azimuth_list,
+                length_list=finder_length_list,
+                azimuth_llk_list=finder_azimuth_llk_list,
+                length_llk_list=finder_length_llk_list,
+                extra=finder_extra or None,
             )
 
             dets.append(
