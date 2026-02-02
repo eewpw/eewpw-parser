@@ -17,6 +17,9 @@ from .parsers.vs.dialects import VSDialect, VSStreamState
 # PLUM streaming through parser + dialect state
 from .parsers.plum.plum_parser import PlumParser
 from .parsers.plum.dialects import PlumStreamState
+# EPIC streaming through parser + dialect state
+from .parsers.epic.epic_parser import EpicParser
+from .parsers.epic.dialects import EpicStreamState
 
 
 class LiveEngine:
@@ -50,6 +53,7 @@ class LiveEngine:
         self._finder_state: Optional[FinderStreamState] = None
         self._vs_state: Optional[VSStreamState] = None
         self._plum_state: Optional[PlumStreamState] = None
+        self._epic_state: Optional[EpicStreamState] = None
         self._last_event_id: Optional[str] = None
         self._started_dt: Optional[datetime] = None
         self._finished_dt: Optional[datetime] = None
@@ -106,6 +110,11 @@ class LiveEngine:
                 for line in self.source:
                     dets, anns, self._plum_state = self.parser.parse_stream([line], state=self._plum_state, finalize=False)
                     self._emit(dets, anns)
+            elif isinstance(self.parser, EpicParser):
+                self._epic_state = self._epic_state or EpicStreamState()
+                for line in self.source:
+                    dets, anns, self._epic_state = self.parser.parse_stream([line], state=self._epic_state, finalize=False)
+                    self._emit(dets, anns)
             else:
                 raise ValueError("Unsupported parser type for live engine")
         finally:
@@ -130,6 +139,11 @@ class LiveEngine:
                 if self._plum_state is None:
                     self._plum_state = PlumStreamState()
                 dets, anns, self._plum_state = self.parser.parse_stream([], state=self._plum_state, finalize=True)
+                self._emit(dets, anns)
+            elif isinstance(self.parser, EpicParser):
+                if self._epic_state is None:
+                    self._epic_state = EpicStreamState()
+                dets, anns, self._epic_state = self.parser.parse_stream([], state=self._epic_state, finalize=True)
                 self._emit(dets, anns)
         finally:
             meta = Meta(
