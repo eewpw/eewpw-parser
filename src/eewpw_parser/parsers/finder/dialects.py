@@ -271,19 +271,19 @@ class FinderBaseDialect:
     def _build_finder_details(
         self,
         *,
-        get_mag: Optional[float] = None,
-        get_mag_unc: Optional[float] = None,
-        get_lat: Optional[float] = None,
-        get_lat_unc: Optional[float] = None,
-        get_lon: Optional[float] = None,
-        get_lon_unc: Optional[float] = None,
-        get_dep: Optional[float] = None,
-        get_dep_unc: Optional[float] = None,
-        get_lik: Optional[float] = None,
+        get_mag: Optional[str] = None,
+        get_mag_unc: Optional[str] = None,
+        get_lat: Optional[str] = None,
+        get_lat_unc: Optional[str] = None,
+        get_lon: Optional[str] = None,
+        get_lon_unc: Optional[str] = None,
+        get_dep: Optional[str] = None,
+        get_dep_unc: Optional[str] = None,
+        get_lik: Optional[str] = None,
         get_otm: Optional[str] = None,
-        get_otm_unc: Optional[float] = None,
+        get_otm_unc: Optional[str] = None,
         get_num_stations: Optional[int] = None,
-        get_azm: Optional[float] = None,
+        get_azm: Optional[str] = None,
         solution: Optional[Dict[str, str]] = None,
         finder_flags: Optional[Dict[str, str]] = None,
         template_id: Optional[str] = None,
@@ -297,14 +297,14 @@ class FinderBaseDialect:
     ) -> Optional[FinderDetails]:
         """
         Normalize FinDer-derived metrics to stable snake_case keys.
-        Epoch origin time lives in origin_time_epoch; other metrics remain stringified.
+        Epoch origin time lives in origin_time_epoch; other metrics remain strings.
         """
         solution_metrics: Dict[str, str] = {}
 
-        def add_metric(key: str, val: Optional[float]) -> None:
+        def add_metric(key: str, val: Optional[str]) -> None:
             if val is None:
                 return
-            solution_metrics[key] = str(val)
+            solution_metrics[key] = val
 
         add_metric("mag", get_mag)
         add_metric("mag_uncer", get_mag_unc)
@@ -455,6 +455,9 @@ class FinderBaseDialect:
         return bool(self.P_EVENT_ID.search(line))
 
     def _should_collect_inline_station_rows(self) -> bool:
+        return False
+
+    def _should_continue_after_station_header(self) -> bool:
         return False
     
     def _parse_detections(self, lines: List[str]) -> List[Detection]:
@@ -625,8 +628,27 @@ class FinderBaseDialect:
 
             # Look back a bit to capture SOLUTION lines and flags that often
             # precede the explicit event_id marker in scfinder logs.
-            if state.recent_lines:
-                for _, prev_line in list(state.recent_lines)[-100:][::-1]:
+            if state.recent_lines or i > 0:
+                current_abs_line = state.line_offset + i + 1
+                if state.recent_lines and state.recent_lines[0][0] < current_abs_line:
+                    recent_lines_iter = [
+                        prev_line
+                        for line_no, prev_line in reversed(state.recent_lines)
+                        if line_no < current_abs_line
+                    ]
+                else:
+                    recent_lines_iter = list(
+                        reversed(lines[max(0, i - FINDER_RECENT_LINES_MAX) : i])
+                    )
+                for prev_line in recent_lines_iter:
+                    raw_prev = prev_line.strip()
+                    msg_prev = self._normalize_message(prev_line).strip()
+                    if template_id is None:
+                        m_tpl_prev = self.P_TEMPLATE_ID.match(raw_prev)
+                        if not m_tpl_prev and msg_prev:
+                            m_tpl_prev = self.P_TEMPLATE_ID.match(msg_prev)
+                        if m_tpl_prev:
+                            template_id = (m_tpl_prev.group(1) or "").strip()
                     # SOLUTION RUPTURE
                     m_rup_line_b = self.P_SOL_RUP_LINE.search(prev_line)
                     if m_rup_line_b:
@@ -663,6 +685,44 @@ class FinderBaseDialect:
                 s = lines[j]
 
                 if self.P_STATION_HEADER.search(s):
+                    if self._should_continue_after_station_header():
+                        k = j + 1
+                        stations = []
+                        while k < len(lines):
+                            mrow = self.P_STATION_ROW.findall(lines[k])
+                            if not mrow:
+                                break
+                            for match in mrow:
+                                sta, lat, lon, pga, t_epoch, include = (
+                                    match[0],
+                                    match[1],
+                                    match[2],
+                                    match[3],
+                                    match[4],
+                                    match[5],
+                                )
+                                if int(include) == 1:
+                                    stations.append(
+                                        (
+                                            float(lat),
+                                            float(lon),
+                                            trim(sta),
+                                            float(t_epoch),
+                                            float(pga),
+                                        )
+                                    )
+                            k += 1
+
+                        if not finalize and k >= len(lines) and (
+                            k == len(lines) or self.P_STATION_ROW.findall(lines[-1])
+                        ):
+                            state.pending_station_list = pending_station_list
+                            return dets, i
+
+                        if stations:
+                            pending_station_list = stations
+                        j = k
+                        continue
                     if self._should_collect_inline_station_rows():
                         j += 1
                         continue
@@ -710,10 +770,14 @@ class FinderBaseDialect:
                         emission_ts_iso = to_iso_utc_z(mp.group(1))
 
                 msg = self._normalize_message(s)
-                if msg:
+                raw_line = s.strip()
+                m_tpl_id = self.P_TEMPLATE_ID.match(raw_line)
+                if not m_tpl_id and msg:
                     m_tpl_id = self.P_TEMPLATE_ID.match(msg)
-                    if m_tpl_id:
-                        template_id = (m_tpl_id.group(1) or "").strip()
+                if m_tpl_id:
+                    template_id = (m_tpl_id.group(1) or "").strip()
+
+                if msg:
 
                     m_centroid = self.P_FINDER_CENTROID.match(msg)
                     if m_centroid:
@@ -754,32 +818,29 @@ class FinderBaseDialect:
                         continue
 
                 if (m := self.P_GET_MAG.search(s)):
-                    get_mag = float(m.group(1))
+                    get_mag = m.group(1).strip()
                 if (m := self.P_GET_MAG_UNC.search(s)):
-                    get_mag_unc = float(m.group(1))
+                    get_mag_unc = m.group(1).strip()
                 if (m := self.P_GET_LAT.search(s)):
-                    get_lat = float(m.group(1))
+                    get_lat = m.group(1).strip()
                 if (m := self.P_GET_LAT_UNC.search(s)):
-                    get_lat_unc = float(m.group(1))
+                    get_lat_unc = m.group(1).strip()
                 if (m := self.P_GET_LON.search(s)):
-                    get_lon = float(m.group(1))
+                    get_lon = m.group(1).strip()
                 if (m := self.P_GET_LON_UNC.search(s)):
-                    get_lon_unc = float(m.group(1))
+                    get_lon_unc = m.group(1).strip()
                 if (m := self.P_GET_DEP.search(s)):
-                    get_dep = float(m.group(1))
+                    get_dep = m.group(1).strip()
                 if (m := self.P_GET_DEP_UNC.search(s)):
-                    get_dep_unc = float(m.group(1))
+                    get_dep_unc = m.group(1).strip()
                 if (m := self.P_GET_LIK.search(s)):
-                    get_lik = float(m.group(1))
+                    get_lik = m.group(1).strip()
                 if (m := self.P_GET_AZM.search(s)):
-                    get_azm = float(m.group(1))
+                    get_azm = m.group(1).strip()
                 if (m := self.P_GET_OTM.search(s)):
-                    get_otm = m.group(1)
+                    get_otm = m.group(1).strip()
                 if (m := self.P_GET_OTM_UNC.search(s)):
-                    try:
-                        get_otm_unc = float(m.group(1))
-                    except ValueError:
-                        get_otm_unc = None
+                    get_otm_unc = m.group(1).strip()
                 if (m := self.P_GET_NUM_STATIONS.search(s)):
                     try:
                         get_num_stations = int(m.group(1))
@@ -1158,38 +1219,28 @@ class ShakeAlertFinderDialect(FinderBaseDialect):
             core_el = root.find("core_info")
             event_id = core_el.attrib.get("id") if core_el is not None else "0"
 
-            def _get_text_float(parent: Optional[ET.Element], tag: str) -> Optional[float]:
-                if parent is None:
-                    return None
-                sub = parent.find(tag)
-                if sub is None or sub.text is None:
-                    return None
-                try:
-                    return float(sub.text)
-                except ValueError:
-                    return None
-
             def _get_text_str(parent: Optional[ET.Element], tag: str) -> Optional[str]:
                 if parent is None:
                     return None
                 sub = parent.find(tag)
                 if sub is None or sub.text is None:
                     return None
-                return sub.text.strip()
+                text = sub.text.strip()
+                return text if text != "" else None
 
-            mag = _get_text_float(core_el, "mag")
-            lat = _get_text_float(core_el, "lat")
-            lon = _get_text_float(core_el, "lon")
-            depth = _get_text_float(core_el, "depth")
-            likelihood = _get_text_float(core_el, "likelihood")
+            mag = _get_text_str(core_el, "mag")
+            lat = _get_text_str(core_el, "lat")
+            lon = _get_text_str(core_el, "lon")
+            depth = _get_text_str(core_el, "depth")
+            likelihood = _get_text_str(core_el, "likelihood")
             orig_time_str = _get_text_str(core_el, "orig_time") or ""
 
             core = DetectionCore(
                 id=str(event_id),
-                mag=mag if mag is not None else 0.0,
-                lat=lat if lat is not None else 0.0,
-                lon=lon if lon is not None else 0.0,
-                depth=depth if depth is not None else 0.0,
+                mag=mag if mag is not None else "0.0",
+                lat=lat if lat is not None else "0.0",
+                lon=lon if lon is not None else "0.0",
+                depth=depth if depth is not None else "0.0",
                 orig_time=orig_time_str or (timestamp_attr or "1970-01-01T00:00:00Z"),
                 likelihood=likelihood,
             )
@@ -1199,16 +1250,16 @@ class ShakeAlertFinderDialect(FinderBaseDialect):
                 v_lat = v.findtext("lat")
                 v_lon = v.findtext("lon")
                 v_dep = v.findtext("depth")
-                try:
-                    fault_vertices.append(
-                        FaultVertex(
-                            lat=float(v_lat) if v_lat is not None else 0.0,
-                            lon=float(v_lon) if v_lon is not None else 0.0,
-                            depth=float(v_dep) if v_dep is not None else 0.0,
-                        )
+                v_lat_txt = v_lat.strip() if v_lat is not None else "0.0"
+                v_lon_txt = v_lon.strip() if v_lon is not None else "0.0"
+                v_dep_txt = v_dep.strip() if v_dep is not None else "0.0"
+                fault_vertices.append(
+                    FaultVertex(
+                        lat=v_lat_txt,
+                        lon=v_lon_txt,
+                        depth=v_dep_txt,
                     )
-                except ValueError:
-                    continue
+                )
 
             pga_list: List[GMObs] = []
             pga_root = root.find("gm_info/gmpoint_obs/pga_obs")
@@ -1220,9 +1271,9 @@ class ShakeAlertFinderDialect(FinderBaseDialect):
                     lon_txt = obs.findtext("lon") or "0"
                     time_txt = (obs.findtext("time") or "").strip()
                     try:
-                        value = float(value_txt)
-                        lat_obs = float(lat_txt)
-                        lon_obs = float(lon_txt)
+                        value = str(value_txt)
+                        lat_obs = str(lat_txt)
+                        lon_obs = str(lon_txt)
                     except ValueError:
                         continue
                     pga_list.append(
@@ -1236,8 +1287,10 @@ class ShakeAlertFinderDialect(FinderBaseDialect):
                         )
                     )
 
-            version = int(version_attr) if version_attr.isdigit() else version_by_event.get(event_id, 0)
-            version_by_event[event_id] = version
+            version_str = (version_attr or "0").strip()
+            if version_str == "":
+                version_str = "0"
+            version_by_event[event_id] = version_str
 
             timestamp_final = timestamp_attr or core.orig_time
 
@@ -1256,7 +1309,7 @@ class ShakeAlertFinderDialect(FinderBaseDialect):
                     category=category,
                     instance=instance,
                     orig_sys=orig_sys,
-                    version=int(version),
+                    version=version_str,
                     core_info=core,
                     fault_info=fault_vertices,
                     gm_info={"pgv_obs": [], "pga_obs": pga_list},
@@ -1389,13 +1442,71 @@ class NativeFinderDialect(FinderBaseDialect):
             finder_pdf: Dict[str, List[Dict[str, str]]] = {}
             emission_ts_iso: Optional[str] = None
 
+            if state.recent_lines or i > 0:
+                current_abs_line = state.line_offset + i + 1
+                if state.recent_lines and state.recent_lines[0][0] < current_abs_line:
+                    recent_lines_iter = [
+                        prev_line
+                        for line_no, prev_line in reversed(state.recent_lines)
+                        if line_no < current_abs_line
+                    ]
+                else:
+                    recent_lines_iter = list(
+                        reversed(lines[max(0, i - FINDER_RECENT_LINES_MAX) : i])
+                    )
+                for prev_line in recent_lines_iter:
+                    if template_id is None:
+                        raw_prev = prev_line.strip()
+                        msg_prev = self._normalize_message(prev_line).strip()
+                        m_tpl_prev = self.P_TEMPLATE_ID.match(raw_prev)
+                        if not m_tpl_prev and msg_prev:
+                            m_tpl_prev = self.P_TEMPLATE_ID.match(msg_prev)
+                        if m_tpl_prev:
+                            template_id = (m_tpl_prev.group(1) or "").strip()
+
             j = i + 1
             next_event_idx: Optional[int] = None
             while j < len(lines):
                 s = lines[j]
 
                 if self.P_STATION_HEADER.search(s):
-                    break
+                    k = j + 1
+                    stations = []
+                    while k < len(lines):
+                        mrow = self.P_STATION_ROW.findall(lines[k])
+                        if not mrow:
+                            break
+                        for match in mrow:
+                            sta, lat, lon, pga, t_epoch, include = (
+                                match[0],
+                                match[1],
+                                match[2],
+                                match[3],
+                                match[4],
+                                match[5],
+                            )
+                            if int(include) == 1:
+                                stations.append(
+                                    (
+                                        float(lat),
+                                        float(lon),
+                                        trim(sta),
+                                        float(t_epoch),
+                                        float(pga),
+                                    )
+                                )
+                        k += 1
+
+                    if not finalize and k >= len(lines) and (
+                        k == len(lines) or self.P_STATION_ROW.findall(lines[-1])
+                    ):
+                        state.pending_station_list = pending_station_list
+                        return dets, i
+
+                    if stations:
+                        pending_station_list = stations
+                    j = k
+                    continue
 
                 if self.P_EVENT_ID.search(s):
                     next_event_idx = j
@@ -1451,19 +1562,19 @@ class NativeFinderDialect(FinderBaseDialect):
                         continue
 
                 if (m := self.P_GET_MAG.search(s)):
-                    get_mag = float(m.group(1))
+                    get_mag = m.group(1).strip()
                 if (m := self.P_GET_LAT.search(s)):
-                    get_lat = float(m.group(1))
+                    get_lat = m.group(1).strip()
                 if (m := self.P_GET_LON.search(s)):
-                    get_lon = float(m.group(1))
+                    get_lon = m.group(1).strip()
                 if (m := self.P_GET_DEP.search(s)):
-                    get_dep = float(m.group(1))
+                    get_dep = m.group(1).strip()
                 if (m := self.P_GET_LIK.search(s)):
-                    get_lik = float(m.group(1))
+                    get_lik = m.group(1).strip()
                 if (m := self.P_GET_AZM.search(s)):
-                    get_azm = float(m.group(1))
+                    get_azm = m.group(1).strip()
                 if (m := self.P_GET_OTM.search(s)):
-                    get_otm = m.group(1)
+                    get_otm = m.group(1).strip()
 
                 if (m := self.P_GET_RUP.search(s)):
                     coords = self.P_RUP_PT.findall(m.group(1))
@@ -1471,9 +1582,9 @@ class NativeFinderDialect(FinderBaseDialect):
                         rupture_list.extend(
                             [
                                 FaultVertex(
-                                    lat=float(a),
-                                    lon=float(b),
-                                    depth=float(c),
+                                    lat=str(a),
+                                    lon=str(b),
+                                    depth=str(c),
                                 )
                                 for a, b, c in coords
                             ]
@@ -1488,9 +1599,9 @@ class NativeFinderDialect(FinderBaseDialect):
                             a, b, c = mc.groups()
                             rupture_list.append(
                                 FaultVertex(
-                                    lat=float(a),
-                                    lon=float(b),
-                                    depth=float(c),
+                                    lat=str(a),
+                                    lon=str(b),
+                                    depth=str(c),
                                 )
                             )
                             k += 1
@@ -1609,6 +1720,9 @@ class NativeFinderLegacyDialect(FinderBaseDialect):
     #      "process: timestamp in process function = 1723616759"
     P_TS_EPOCH = re.compile(r"\bTimestamp\s*=\s*(\d+)")
     P_TS_PROCESS = re.compile(r"timestamp in process function\s*=\s*(\d+)")
+
+    def _should_continue_after_station_header(self) -> bool:
+        return True
 
     def parse_file(self, path: str, algo: str = "finder", dialect: str = "native_finder_legacy") -> Tuple[List[Detection], List[Annotation], Dict[str, Any]]:
         dets: List[Detection] = []

@@ -14,6 +14,9 @@ from .parsers.finder.finder_parser import FinderParser
 from .parsers.finder.dialects import FinderStreamState
 # VS streaming directly through dialect
 from .parsers.vs.dialects import VSDialect, VSStreamState
+# PLUM streaming through parser + dialect state
+from .parsers.plum.plum_parser import PlumParser
+from .parsers.plum.dialects import PlumStreamState
 
 
 class LiveEngine:
@@ -46,6 +49,7 @@ class LiveEngine:
         # parser state
         self._finder_state: Optional[FinderStreamState] = None
         self._vs_state: Optional[VSStreamState] = None
+        self._plum_state: Optional[PlumStreamState] = None
         self._last_event_id: Optional[str] = None
         self._started_dt: Optional[datetime] = None
         self._finished_dt: Optional[datetime] = None
@@ -97,6 +101,11 @@ class LiveEngine:
                 for line in self.source:
                     d, a = self.parser.feed_line(line, self._vs_state)
                     self._emit(d, a)
+            elif isinstance(self.parser, PlumParser):
+                self._plum_state = self._plum_state or PlumStreamState()
+                for line in self.source:
+                    dets, anns, self._plum_state = self.parser.parse_stream([line], state=self._plum_state, finalize=False)
+                    self._emit(dets, anns)
             else:
                 raise ValueError("Unsupported parser type for live engine")
         finally:
@@ -117,6 +126,11 @@ class LiveEngine:
                     self._vs_state = VSStreamState()
                 d, a = self.parser.flush(self._vs_state)
                 self._emit(d, a)
+            elif isinstance(self.parser, PlumParser):
+                if self._plum_state is None:
+                    self._plum_state = PlumStreamState()
+                dets, anns, self._plum_state = self.parser.parse_stream([], state=self._plum_state, finalize=True)
+                self._emit(dets, anns)
         finally:
             meta = Meta(
                 algo=self.algo,

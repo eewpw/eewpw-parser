@@ -129,12 +129,21 @@ class VSDetails(BaseModel):
     extra: Dict[str, Any] = Field(default_factory=dict)
 
 
+class GMGridCell(BaseModel):
+    lon: str
+    lat: str
+    pga: str
+    pgv: str
+    mmi: str
+
+
 class GMInfo(BaseModel):
     """Ground-motion data grouped by measure plus optional predicted 
     products; extensions go to extra."""
     pga_obs: List[GMObs] = Field(default_factory=list)
     pgv_obs: List[GMObs] = Field(default_factory=list)
     pgd_obs: List[GMObs] = Field(default_factory=list)
+    grid_data: List[GMGridCell] = Field(default_factory=list)
     gmcontour_pred: List[MMIContour] = Field(default_factory=list)
     extra: Dict[str, Any] = Field(default_factory=dict)
 
@@ -180,7 +189,7 @@ class Detection(BaseModel):
         if isinstance(v, dict):
             if "extras" in v:
                 raise ValueError("Field 'extras' is not allowed; use 'extra' instead.")
-            known_keys = {"pga_obs", "pgv_obs", "pgd_obs", "gmcontour_pred", "extra"}
+            known_keys = {"pga_obs", "pgv_obs", "pgd_obs", "grid_data", "gmcontour_pred", "extra"}
             gm_info_data = {k: v[k] for k in known_keys if k in v}
             gm_info = GMInfo(**gm_info_data)
             extra_payload = {k: val for k, val in v.items() if k not in known_keys}

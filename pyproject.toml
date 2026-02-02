@@ -26,3 +26,9 @@ eewpw_parser = ["configs/**"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.pytest.ini_options]
+addopts = "--capture=sys"
+markers = [
+  "finder_regression_smoke: real-log smoke tests for finder dialects",
+]
