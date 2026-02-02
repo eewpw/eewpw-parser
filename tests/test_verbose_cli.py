@@ -10,7 +10,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from eewpw_parser.parsers.vs.vs_parser import VSParser
 
 
-SAMPLE_LOG = ROOT.parent / "test-data/parser_train_data/ELM2020/scvsmag-processing-info.log"
+SAMPLE_LOG = ROOT / "example-data" / "vs_scvsmag" / "scvsmag_Elm2020" / "scvsmag-processing-info.log"
 
 
 class TestVerboseCLI(unittest.TestCase):

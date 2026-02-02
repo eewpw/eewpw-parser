@@ -20,7 +20,7 @@ class VSParser:
         files = [str(Path(p)) for p in inputs]
         dets_all = []
         ann_all = []
-        per_file_extras: List[Dict[str, Any]] = []
+        per_file_extra: List[Dict[str, Any]] = []
 
         worker = VSDialect()
         if hasattr(worker, "verbose"):
@@ -34,13 +34,13 @@ class VSParser:
             sink.start_run()
 
         for p in files:
-            d, a, extras = worker.parse_file(p)
+            d, a, extra = worker.parse_file(p)
             for ann in a:
                 if ann.pattern_id is not None and ann.pattern_id != "":
                     ann.pattern_id = f"vs/{self.dialect}:{ann.pattern_id}"
             dets_all.extend(d)
             ann_all.extend(a)
-            per_file_extras.append(extras)
+            per_file_extra.append(extra)
 
             if self.verbose:
                 print(
@@ -48,8 +48,8 @@ class VSParser:
                         path=p,
                         dets=len(d),
                         anns=len(a),
-                        start=extras.get("started_at") or "-",
-                        end=extras.get("finished_at") or "-",
+                        start=extra.get("started_at") or "-",
+                        end=extra.get("finished_at") or "-",
                     )
                 )
 
@@ -70,7 +70,7 @@ class VSParser:
 
         start_candidates = []
         end_candidates = []
-        for fx in per_file_extras:
+        for fx in per_file_extra:
             if fx.get("started_at"):
                 start_candidates.append(dtp.parse(fx["started_at"]))
             if fx.get("finished_at"):
@@ -96,7 +96,7 @@ class VSParser:
             "files": len(files),
         }
 
-        extras = {"files": per_file_extras}
+        extra = {"files": per_file_extra}
 
         meta = Meta(
             algo="vs",
@@ -104,7 +104,7 @@ class VSParser:
             schema_version=SCHEMA_VERSION,
             started_at=started_at_iso,
             finished_at=finished_at_iso,
-            extras=extras,
+            extra=extra,
             stats_total=stats_total,
         )
 

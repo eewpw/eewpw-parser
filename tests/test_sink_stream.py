@@ -42,7 +42,7 @@ class TestJsonlStreamSink(unittest.TestCase):
 
             sink.emit_detection(d1)
             sink.emit_annotation("profile", ann1)
-            meta = Meta(algo="vs", dialect="scvs", stats_total={}, extras={})
+            meta = Meta(algo="vs", dialect="scvs", stats_total={}, extra={})
             sink.finalize(meta)
 
             lines = out_path.read_text(encoding="utf-8").strip().splitlines()

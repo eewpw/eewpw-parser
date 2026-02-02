@@ -8,7 +8,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from eewpw_parser.parsers.finder.finder_parser import FinderParser
 
-EXAMPLE_LOG = ROOT / "example-data" / "Elm2020" / "scfinder.log"
+EXAMPLE_LOG = ROOT / "example-data" / "finder_scfinder" / "scfinder_Elm2020" / "scfinder.log"
 
 
 def _parse_scfinder():

@@ -310,7 +310,7 @@ class VSDialect:
         dets.extend(d_flush)
         ann.extend(a_flush)
 
-        extras: Dict[str, Any] = {
+        extra: Dict[str, Any] = {
             "file": str(path),
             "playback_time": None,
             "started_at": state.file_start_ts_iso,
@@ -320,7 +320,7 @@ class VSDialect:
                 "annotations": len(ann),
             },
         }
-        return dets, ann, extras
+        return dets, ann, extra
 
     # --- streaming helpers ---
 

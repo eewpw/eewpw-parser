@@ -12,7 +12,7 @@ from eewpw_parser.verifiers.finder_scfinder import (  # noqa: E402
 )
 
 
-SAMPLE_LOG = ROOT / "example-data" / "Elm2020" / "scfinder.log"
+SAMPLE_LOG = ROOT / "example-data" / "finder_scfinder" / "scfinder_Elm2020" / "scfinder.log"
 
 
 class TestFinderVerifierSCFinder(unittest.TestCase):

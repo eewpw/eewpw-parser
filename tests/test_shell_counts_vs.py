@@ -9,7 +9,7 @@ from tests.helpers.shell_counts import (
 )
 
 ROOT = Path(__file__).resolve().parent.parent
-SAMPLE_LOG = ROOT / "example-data" / "Elm2020" / "scvsmag-processing-info.log"
+SAMPLE_LOG = ROOT / "example-data" / "vs_scvsmag" / "scvsmag_Elm2020" / "scvsmag-processing-info.log"
 
 
 class TestVSShellDerivedCounts(unittest.TestCase):

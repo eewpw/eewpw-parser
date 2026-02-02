@@ -1,6 +1,6 @@
 # VS Parser (design)
 
-Target log style: `scvsmag-processing-info.log` under `test-data/parser_train_data/ELM2020/`. Each line has a prefix timestamp `[processing/info/VsMagnitude]` followed by structured key/value phrases.
+Target log style: SeisComP `scvsmag` processing/info logs (example: `example-data/vs_scvsmag/scvsmag_Elm2020/scvsmag-processing-info.log`). Each line has a prefix timestamp `[processing/info/VsMagnitude]` followed by structured key/value phrases.
 
 ## Expected patterns
 
@@ -35,7 +35,7 @@ Target log style: `scvsmag-processing-info.log` under `test-data/parser_train_da
 
 ## Dialect structure
 
-- Single dialect for now: `ELM2020` (SeisComP `scvsmag` info logs).
+- Single dialect for now: `scvsmag` (SeisComP `scvsmag` info logs). `ELM2020` refers only to the example dataset.
 - Parser keeps a state machine per event:
   - On `Start logging for event`, flush any current block and begin a new one.
   - Consume Sensor blocks and summary lines until `End logging for event` (or next Start), then emit a detection.
@@ -52,7 +52,7 @@ Target log style: `scvsmag-processing-info.log` under `test-data/parser_train_da
 
 - Non-parsable lines are ignored.
 - Missing VS-mag or origin time uses safest defaults: mag=0.0, depth=0.0, `orig_time` from the latest prefix timestamp, likelihood None.
-- `nan` station magnitudes and sentinel `-1.00e+00` values are dropped from GM observations.
+- `nan` station magnitudes are skipped; sentinel `-1.00e+00` values are preserved as sentinel GM observations (stored with `extra["vs"].is_sentinel = True` and `raw_value`).
 
 ## Implementation (current)
 

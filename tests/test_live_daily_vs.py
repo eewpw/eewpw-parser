@@ -50,7 +50,7 @@ class TestLiveDailyVS(unittest.TestCase):
                 started_at=det.timestamp,
                 finished_at=det.timestamp,
                 playback_time=None,
-                extras={},
+                extra={},
                 stats_total={},
             )
 

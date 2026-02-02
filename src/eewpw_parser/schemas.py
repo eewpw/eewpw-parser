@@ -10,7 +10,7 @@ All fields are strings unless otherwise noted, to preserve original formatting.
 
 FinalDoc shape (JSON):
 {
-  "meta": {"algo": "...", "dialect": "...", "schema_version": "...", "extras": {}, "stats_total": {}},
+  "meta": {"algo": "...", "dialect": "...", "schema_version": "...", "extra": {}, "stats_total": {}},
   "annotations": {"<profile>": [Annotation, ...]},
   "detections": [
     {
@@ -20,7 +20,7 @@ FinalDoc shape (JSON):
       "gm_info": {"pga_obs": [GMObs, ...], "pgv_obs": [...], "pgd_obs": [...], "gmcontour_pred": [...], "extra": {}},
       "finder_details": {...} | null,
       "vs_details": {...} | null,
-      "extras": {}
+      "extra": {}
     },
     ...
   ]
@@ -28,7 +28,7 @@ FinalDoc shape (JSON):
 """
 
 from typing import List, Dict, Any, Optional
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 # Current schema version, The version format is opaque. For now,
 # the adapted logic is "year.increment" (e.g., "2025.0", "2025.1").
@@ -125,7 +125,13 @@ class Detection(BaseModel):
     gm_info: GMInfo = Field(default_factory=GMInfo)
     finder_details: Optional[FinderDetails] = None
     vs_details: Optional[VSDetails] = None
-    extras: Dict[str, Any] = Field(default_factory=dict)
+    extra: Dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="before")
+    def _reject_extras_key(cls, v):
+        if isinstance(v, dict) and "extras" in v:
+            raise ValueError("Field 'extras' is not allowed; use 'extra' instead.")
+        return v
 
     @field_validator("fault_info", mode="before")
     def _coerce_fault_info(cls, v):
@@ -145,12 +151,14 @@ class Detection(BaseModel):
         if v is None or v == {}:
             return GMInfo()
         if isinstance(v, dict):
+            if "extras" in v:
+                raise ValueError("Field 'extras' is not allowed; use 'extra' instead.")
             known_keys = {"pga_obs", "pgv_obs", "pgd_obs", "gmcontour_pred", "extra"}
             gm_info_data = {k: v[k] for k in known_keys if k in v}
             gm_info = GMInfo(**gm_info_data)
-            extras_payload = {k: val for k, val in v.items() if k not in known_keys}
-            if extras_payload:
-                gm_info.extra.update(extras_payload)
+            extra_payload = {k: val for k, val in v.items() if k not in known_keys}
+            if extra_payload:
+                gm_info.extra.update(extra_payload)
             return gm_info
         return v
 
@@ -173,8 +181,14 @@ class Meta(BaseModel):
     started_at: Optional[str] = None
     finished_at: Optional[str] = None
     playback_time: Optional[str] = None
-    extras: Dict[str, Any] = Field(default_factory=dict)
+    extra: Dict[str, Any] = Field(default_factory=dict)
     stats_total: Dict[str, int] = Field(default_factory=dict)
+
+    @model_validator(mode="before")
+    def _reject_extras_key(cls, v):
+        if isinstance(v, dict) and "extras" in v:
+            raise ValueError("Field 'extras' is not allowed; use 'extra' instead.")
+        return v
 
     @field_validator("schema_version", mode="before")
     def _default_schema_version(cls, v):

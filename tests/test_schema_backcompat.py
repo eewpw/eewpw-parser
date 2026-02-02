@@ -35,7 +35,7 @@ def _base_detection(core_overrides=None, **overrides):
 
 def _base_doc(detection):
     return {
-        "meta": {"algo": "a", "dialect": "d", "extras": {}, "stats_total": {}},
+        "meta": {"algo": "a", "dialect": "d", "extra": {}, "stats_total": {}},
         "annotations": {},
         "detections": [detection],
     }

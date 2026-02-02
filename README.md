@@ -32,7 +32,7 @@ eewpw-parse --algo vs --dialect scvsmag --mode stream-jsonl --instance vs@node1 
 Notes:
 - Config is merged from `configs/global.json` and `configs/<algo>.json` (e.g., `configs/finder.json`).
 - Output formatting can be tuned via `output.pretty|indent|ensure_ascii` in config.
-- Detections are sorted by `timestamp`; per-file extras are emitted under `meta.extras["files"]`.
+- Detections are sorted by `timestamp`; per-file extra metadata is emitted under `meta.extra["files"]`.
 
 ## Replay Log CLI
 

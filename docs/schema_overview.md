@@ -31,7 +31,7 @@ classDiagram
         started_at: string
         finished_at: string
         playback_time: string
-        extras: Map<string, any>
+        extra: Map<string, any>
         stats_total: Map<string, int>
     }
     class Annotation {
@@ -50,10 +50,12 @@ classDiagram
 These three blocks exist to separate responsibilities: `meta` (run context), `annotations` (timeline hints), and `detections` (algorithm outputs). Three is sufficient and necessary for stable consumption.
 
 ## Reading a FinalDoc
-- `meta` answers “what produced this file?” (algo, dialect, timing, stats, schema_version stamping).
+- `meta` answers “what produced this file?” (algo, dialect, timing, stats, schema_version stamping); per-file metadata is carried under `meta.extra["files"]` when present.
+- `meta.files` is optional and generally unused by current parsers (kept for legacy/back-compat inputs).
 - `annotations` answer “what interesting things happened over time?” (profile/regex hints; optional).
 - `detections` answer “what did the algorithm decide?” (solutions/updates; essential payload).
-- Annotations are optional. `gm_info` is optional. Detections are essential.
+- Annotations are optional. `gm_info` and `fault_info` default to empty containers when omitted. Detections are essential.
+- The only extension point is `extra` (singular). Any `extras` key is invalid and should fail validation.
 - The schema is frozen (for now) and backward compatible; legacy JSON/JSONL must still load. `meta.schema_version` is stamped when created and defaults to the current `SCHEMA_VERSION` (2025.1) if missing on read.
 
 ## Detection Breakdown
@@ -62,11 +64,11 @@ flowchart TD
     D[Detection]
     D --> H[Header Fields<br/>timestamp, event_id, category, instance, orig_sys, version]
     D --> C[core_info: DetectionCore]
-    D --> G[gm_info: GMInfo::optional]
-    D --> F[fault_info: FaultVertex List::optional]
+    D --> G[gm_info: GMInfo (default empty)]
+    D --> F[fault_info: FaultVertex List (default empty)]
     D --> V[vs_details::optional]
     D --> X[finder_details::optional]
-    D --> E[extras: Map<string, any>]
+    D --> E[extra: Map<string, any>]
 
     C --> C1[id, mag, lat, lon, depth, orig_time]
     C --> C2[likelihood?]
@@ -125,27 +127,36 @@ classDiagram
 Annotations are regex/profile-based hints keyed by frontend profile IDs. Namespacing rule: `pattern_id = "{algo}/{dialect}:{rule_id}"`, which is required for merged or multi-algo views to avoid collisions.
 
 ## Minimal Example (Annotated)
-This example shows the unified shape with one detection, one annotation, and one ground-motion observation. Optional blocks are empty where unused, and numeric values remain strings to preserve formatting.
+This example shows the unified shape with one detection, one annotation, and one ground-motion observation. Optional blocks are empty where unused, and numeric values remain strings to preserve formatting. The `vs/scvsmag` values here are purely illustrative and are not canonical.
 ```json
 {
   "meta": {
     "algo": "vs",
     "dialect": "scvsmag",
     "schema_version": "2025.1",
-    "files": ["example.log"],
     "started_at": "2025-12-23T19:35:40Z",
     "finished_at": "2025-12-23T19:35:50Z",
-    "extras": {},
-    "stats_total": {"detections": 1}
+    "extra": {
+      "files": [
+        {
+          "file": "example.log",
+          "playback_time": null,
+          "started_at": "2025-12-23T19:35:40Z",
+          "finished_at": "2025-12-23T19:35:50Z",
+          "stats": {"detections": 1, "annotations": 1}
+        }
+      ]
+    },
+    "stats_total": {"detections": 1, "annotations": 1, "files": 1}
   },
   "annotations": {
     "time_vs_magnitude": [
       {
         "timestamp": "2025-12-23T19:35:49Z",
-        "pattern": "mag_update",
+        "pattern": "Start logging for event",
         "line": "42",
-        "text": "Updated M=3.2 at 19:35:40Z",
-        "pattern_id": "vs/scvsmag:mag_update"
+        "text": "Start logging for event: 20251223193548-001",
+        "pattern_id": "vs/scvsmag:start_event"
       }
     ]
   },
@@ -153,8 +164,8 @@ This example shows the unified shape with one detection, one annotation, and one
     {
       "timestamp": "2025-12-23T19:35:48Z",
       "event_id": "20251223193548-001",
-      "category": "update",
-      "instance": "vs@harness",
+      "category": "live",
+      "instance": "vs@unknown",
       "orig_sys": "vs",
       "version": "1",
       "core_info": {
@@ -184,7 +195,7 @@ This example shows the unified shape with one detection, one annotation, and one
         "gmcontour_pred": [],
         "extra": {}
       },
-      "extras": {}
+      "extra": {}
     }
   ]
 }

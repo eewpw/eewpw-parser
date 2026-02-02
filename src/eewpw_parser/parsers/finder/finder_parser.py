@@ -64,7 +64,7 @@ class FinderParser:
         # Order is whatever user provided; this is safer than glob
         dets_all = []
         ann_all = []
-        per_file_extras: List[Dict[str, Any]] = []
+        per_file_extra: List[Dict[str, Any]] = []
 
         worker = self._get_worker()
 
@@ -76,13 +76,13 @@ class FinderParser:
             print(f"Dialect: {self.dialect} Files: {len(files)}")
 
         for p in files:
-            d, a, extras = worker.parse_file(p)
+            d, a, extra = worker.parse_file(p)
             for ann in a:
                 if ann.pattern_id is not None and ann.pattern_id != "":
                     ann.pattern_id = f"finder/{self.dialect}:{ann.pattern_id}"
             dets_all.extend(d)
             ann_all.extend(a)
-            per_file_extras.append(extras)
+            per_file_extra.append(extra)
 
             if sink:
                 for det in d:
@@ -96,9 +96,9 @@ class FinderParser:
                         path=p,
                         dets=len(d),
                         anns=len(a),
-                        start=extras.get("started_at") or "-",
-                        end=extras.get("finished_at") or "-",
-                        playback=extras.get("playback_time") or "-",
+                        start=extra.get("started_at") or "-",
+                        end=extra.get("finished_at") or "-",
+                        playback=extra.get("playback_time") or "-",
                     )
                 )
 
@@ -112,10 +112,10 @@ class FinderParser:
         # Sort detections by timestamp ascending
         dets_all.sort(key=lambda x: x.timestamp)
 
-        # --- derive started_at, finished_at from per-file extras ---
+        # --- derive started_at, finished_at from per-file extra ---
         start_candidates = []
         end_candidates = []
-        for fx in per_file_extras:
+        for fx in per_file_extra:
             s = fx.get("started_at")
             e = fx.get("finished_at")
             if s:
@@ -140,9 +140,9 @@ class FinderParser:
             "files": len(files),
         }
 
-        # Per-file extras live under meta.extras["files"]
-        extras = {
-            "files": per_file_extras,
+        # Per-file extra lives under meta.extra["files"]
+        extra = {
+            "files": per_file_extra,
         }
 
         meta = Meta(
@@ -151,7 +151,7 @@ class FinderParser:
             schema_version=SCHEMA_VERSION,
             started_at=started_at_iso,
             finished_at=finished_at_iso,
-            extras=extras,
+            extra=extra,
             stats_total=stats_total,
         )
 

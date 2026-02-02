@@ -8,7 +8,7 @@ Finder parsing lives in `src/eewpw_parser/parsers/finder/` and is orchestrated b
 - `NativeFinderDialect`: direct Finder output with per-line timestamps.
 - `NativeFinderLegacyDialect`: legacy Finder without per-line wall-clock stamps; falls back to epoch timestamps inside detection blocks.
 
-`FinderParser.parse(inputs)` collects detections/annotations from each file, merges them, sorts by detection timestamp, derives meta timing from per-file extras, and returns a `FinalDoc`.
+`FinderParser.parse(inputs)` collects detections/annotations from each file, merges them, sorts by detection timestamp, derives meta timing from per-file extra metadata, and returns a `FinalDoc`.
 
 `FinderParser.parse(inputs, sink=None)` also supports streaming: when a sink is provided, detections/annotations are emitted to the sink as they are parsed; meta is finalized at the end and no `FinalDoc` is returned.
 

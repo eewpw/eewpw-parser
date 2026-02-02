@@ -10,7 +10,7 @@ from eewpw_parser.parsers.vs.vs_parser import VSParser  # noqa: E402
 from eewpw_parser.verifiers.vs_scvsmag import extract_vs_oracle_from_log, verify_vs_scvsmag  # noqa: E402
 
 
-SAMPLE_LOG = ROOT / "example-data" / "Elm2020" / "scvsmag-processing-info.log"
+SAMPLE_LOG = ROOT / "example-data" / "vs_scvsmag" / "scvsmag_Elm2020" / "scvsmag-processing-info.log"
 
 
 class TestVSSentinelPreservation(unittest.TestCase):

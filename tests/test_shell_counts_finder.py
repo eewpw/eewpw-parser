@@ -9,7 +9,7 @@ from tests.helpers.shell_counts import (
 )
 
 ROOT = Path(__file__).resolve().parent.parent
-SAMPLE_LOG = ROOT / "example-data" / "Elm2020" / "scfinder.log"
+SAMPLE_LOG = ROOT / "example-data" / "finder_scfinder" / "scfinder_Elm2020" / "scfinder.log"
 
 
 class TestFinderShellDerivedCounts(unittest.TestCase):

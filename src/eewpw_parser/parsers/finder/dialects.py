@@ -185,13 +185,13 @@ class FinderBaseDialect:
         Parse a single scfinder log file and return:
         - detections (list of Detection)
         - annotations (list of Annotation)
-        - extras (per-file metadata dict)
+        - extra (per-file metadata dict)
 
-        The extras block is strictly per-file and will later be placed under:
-            meta.extras["files"] = [extras_per_file, ...]
+        The extra block is strictly per-file and will later be placed under:
+            meta.extra["files"] = [extra_per_file, ...]
         by the orchestrator.
 
-        Shape of `extras`:
+        Shape of `extra`:
         {
             "file": "<path>",
             "playback_time": "<ISO8601 Z or None>",
@@ -227,8 +227,8 @@ class FinderBaseDialect:
         dets.extend(d)
         ann.extend(a)
 
-        # Build per-file extras block
-        extras: Dict[str, Any] = {
+        # Build per-file extra block
+        extra: Dict[str, Any] = {
             "file": str(path),
             "playback_time": state.playback_time_iso,
             "started_at": state.file_start_ts_iso,
@@ -239,7 +239,7 @@ class FinderBaseDialect:
             },
         }
 
-        return dets, ann, extras
+        return dets, ann, extra
     
 
     def _parse_annotations(self, lines: List[str]) -> Tuple[List[Annotation], Optional[str], Optional[str], Optional[str]]:
@@ -1319,7 +1319,7 @@ class NativeFinderLegacyDialect(FinderBaseDialect):
             dets.extend(d)
             ann.extend(a)
 
-        extras: Dict[str, Any] = {
+        extra: Dict[str, Any] = {
             "file": str(path),
             "playback_time": state.playback_time_iso,
             "started_at": state.file_start_ts_iso,
@@ -1330,7 +1330,7 @@ class NativeFinderLegacyDialect(FinderBaseDialect):
             },
         }
 
-        return dets, ann, extras
+        return dets, ann, extra
 
     def _extract_event_id(self, line: str, state: FinderStreamState) -> Optional[str]:
         if self.P_TS_EPOCH.search(line):

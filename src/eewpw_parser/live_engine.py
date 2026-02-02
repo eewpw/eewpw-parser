@@ -126,7 +126,7 @@ class LiveEngine:
                 started_at=self._started_dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ") if self._started_dt else None,
                 finished_at=self._finished_dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ") if self._finished_dt else None,
                 playback_time=None,
-                extras={},
+                extra={},
                 stats_total={},
             )
             self._daily_writer.write_meta(meta)
