@@ -20,6 +20,8 @@ from .parsers.plum.dialects import PlumStreamState
 # EPIC streaming through parser + dialect state
 from .parsers.epic.epic_parser import EpicParser
 from .parsers.epic.dialects import EpicStreamState
+# GFAST parser (live streaming not supported)
+from .parsers.gfast.gfast_parser import GfastParser
 
 
 class LiveEngine:
@@ -115,6 +117,8 @@ class LiveEngine:
                 for line in self.source:
                     dets, anns, self._epic_state = self.parser.parse_stream([line], state=self._epic_state, finalize=False)
                     self._emit(dets, anns)
+            elif isinstance(self.parser, GfastParser):
+                raise ValueError("gfast live streaming is not supported")
             else:
                 raise ValueError("Unsupported parser type for live engine")
         finally:
@@ -145,6 +149,8 @@ class LiveEngine:
                     self._epic_state = EpicStreamState()
                 dets, anns, self._epic_state = self.parser.parse_stream([], state=self._epic_state, finalize=True)
                 self._emit(dets, anns)
+            elif isinstance(self.parser, GfastParser):
+                pass
         finally:
             meta = Meta(
                 algo=self.algo,

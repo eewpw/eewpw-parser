@@ -14,7 +14,7 @@ from eewpw_parser.parsers.epic.epic_parser import EpicParser
 
 def main():
     ap = argparse.ArgumentParser(description="EEWPW live parser (tail + stream per-event JSONL)")
-    ap.add_argument("--algo", required=True, choices=["finder", "vs", "plum", "epic"], help="Algorithm to parse")
+    ap.add_argument("--algo", required=True, choices=["finder", "vs", "plum", "epic", "gfast"], help="Algorithm to parse")
     ap.add_argument("--dialect", required=True, help="Dialect (e.g., scfinder, scvsmag)")
     ap.add_argument("--instance", default=None, help="Instance identifier (e.g., finder@host1)")
     ap.add_argument("--logfile", required=True, help="Path to log file to tail")
@@ -64,6 +64,8 @@ def main():
         parser = PlumParser(cfg)
     elif args.algo == "epic":
         parser = EpicParser(cfg)
+    elif args.algo == "gfast":
+        raise SystemExit("gfast live streaming is not supported")
     else:
         raise SystemExit(f"Unsupported algo: {args.algo}")
 
