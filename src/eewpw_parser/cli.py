@@ -8,11 +8,17 @@ from eewpw_parser.parsers.vs.vs_parser import VSParser
 from eewpw_parser.parsers.plum.plum_parser import PlumParser
 from eewpw_parser.parsers.epic.epic_parser import EpicParser
 from eewpw_parser.parsers.gfast.gfast_parser import GfastParser
+from eewpw_parser.parsers.eqinfo.eqinfo_parser import EqinfoParser
 from eewpw_parser.schemas import FinalDoc
 
 def main():
     ap = argparse.ArgumentParser(description="EEWPW deterministic parser")
-    ap.add_argument("--algo", required=True, choices=["finder", "vs", "plum", "epic", "gfast"], help="Algorithm to parse")
+    ap.add_argument(
+        "--algo",
+        required=True,
+        choices=["finder", "vs", "plum", "epic", "gfast", "eqinfo"],
+        help="Algorithm to parse",
+    )
     ap.add_argument("--dialect", required=True, help="Dialect (e.g., scfinder)")
     ap.add_argument("--config-root", type=Path, default=None, help="Optional override for configs root")
     ap.add_argument("-v", "--verbose", action="store_true", help="Enable verbose console output")
@@ -53,6 +59,8 @@ def main():
         parser = EpicParser(cfg)
     elif args.algo == "gfast":
         parser = GfastParser(cfg)
+    elif args.algo == "eqinfo":
+        parser = EqinfoParser(cfg)
     else:
         raise SystemExit(f"Unsupported algo: {args.algo}")
 
