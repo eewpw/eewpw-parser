@@ -108,6 +108,88 @@ def _write_synthetic_gfast_log(path: Path) -> None:
         "00:00:02:021| INFO | End logging for event 1",
         "00:00:02:022| INFO | == Ending unpackTraceBuf2Messages: [Timing: 0.0001s]",
     ]
+    fault_info_block = [
+        "01:07:55:495| INFO | <?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\" ?>",
+        "01:07:55:495| INFO | <event_message alg_vers=\"2.6.10 2024-02-29\" category=\"live\" instance=\"sa@eew-uw-dev2.ess.washington.edu\" message_type=\"update\" orig_sys=\"sa\" ref_id=\"0\" ref_src=\"\" timestamp=\"2025-11-14T01:07:55.158Z\" version=\"5\">",
+        "01:07:55:495| INFO | ",
+        "01:07:55:495| INFO |   <core_info id=\"1763082460\">",
+        "01:07:55:496| INFO |     <mag units=\"Mw\">6.1842</mag>",
+        "01:07:55:496| INFO |     <mag_uncer units=\"Mw\">0.2102</mag_uncer>",
+        "01:07:55:496| INFO |     <lat units=\"deg\">37.2086</lat>",
+        "01:07:55:496| INFO |     <lat_uncer units=\"deg\">0.0457</lat_uncer>",
+        "01:07:55:496| INFO |     <lon units=\"deg\">37.0269</lon>",
+        "01:07:55:496| INFO |     <lon_uncer units=\"deg\">0.0457</lon_uncer>",
+        "01:07:55:496| INFO |     <depth units=\"km\">9.0000</depth>",
+        "01:07:55:496| INFO |     <depth_uncer units=\"km\">3.5355</depth_uncer>",
+        "01:07:55:496| INFO |     <orig_time units=\"UTC\">2025-11-14T01:07:43.729Z</orig_time>",
+        "01:07:55:496| INFO |     <orig_time_uncer units=\"sec\">0.5127</orig_time_uncer>",
+        "01:07:55:496| INFO |     <likelihood>1.0000</likelihood>",
+        "01:07:55:496| INFO |     <num_stations>18</num_stations>",
+        "01:07:55:496| INFO |   </core_info>",
+        "01:07:55:496| INFO | ",
+        "01:07:55:496| INFO |   <contributors>",
+        "01:07:55:496| INFO |     <contributor alg_instance=\"epic@eew-uw-dev2\" alg_name=\"epic\" alg_version=\"3.3.7-2023-11-01\" category=\"live\" event_id=\"21251\" version=\"4\"/>",
+        "01:07:55:496| INFO |     <contributor alg_instance=\"plum@eew-uw-dev2/plum.eew-uw-dev2\" alg_name=\"plum\" alg_version=\"3.0.0_PLUM_2025-08-28\" category=\"live\" event_id=\"2025111401075200_4615.TK.--\" version=\"2\"/>",
+        "01:07:55:496| INFO |     <contributor alg_instance=\"finder@eew-uw-dev2\" alg_name=\"finder\" alg_version=\"finder-3.3.1e_2025-11-04/libFinder-3.3.1e_2025-11-04\" category=\"live\" event_id=\"1763082473\" version=\"2\"/>",
+        "01:07:55:496| INFO |   </contributors>",
+        "01:07:55:496| INFO | ",
+        "01:07:55:496| INFO |   <fault_info>",
+        "01:07:55:496| INFO |     <finite_fault atten_geom=\"true\" segment_number=\"1\" segment_shape=\"polygon\">",
+        "01:07:55:496| INFO |       <segment>",
+        "01:07:55:496| INFO |         <vertices>",
+        "01:07:55:496| INFO |           <vertex>",
+        "01:07:55:497| INFO |             <lat units=\"deg\">37.3201</lat>",
+        "01:07:55:497| INFO |             <lon units=\"deg\">36.8688</lon>",
+        "01:07:55:497| INFO |             <depth units=\"km\">9.3498</depth>",
+        "01:07:55:497| INFO |           </vertex>",
+        "01:07:55:497| INFO |           <vertex>",
+        "01:07:55:497| INFO |             <lat units=\"deg\">37.3284</lat>",
+        "01:07:55:497| INFO |             <lon units=\"deg\">36.8792</lon>",
+        "01:07:55:497| INFO |             <depth units=\"km\">9.3498</depth>",
+        "01:07:55:497| INFO |           </vertex>",
+        "01:07:55:497| INFO |           <vertex>",
+        "01:07:55:497| INFO |             <lat units=\"deg\">37.3284</lat>",
+        "01:07:55:497| INFO |             <lon units=\"deg\">36.8792</lon>",
+        "01:07:55:497| INFO |             <depth units=\"km\">10.6502</depth>",
+        "01:07:55:497| INFO |           </vertex>",
+        "01:07:55:497| INFO |           <vertex>",
+        "01:07:55:497| INFO |             <lat units=\"deg\">37.3201</lat>",
+        "01:07:55:497| INFO |             <lon units=\"deg\">36.8688</lon>",
+        "01:07:55:497| INFO |             <depth units=\"km\">10.6502</depth>",
+        "01:07:55:497| INFO |           </vertex>",
+        "01:07:55:497| INFO |           <vertex>",
+        "01:07:55:497| INFO |             <lat units=\"deg\">37.3201</lat>",
+        "01:07:55:497| INFO |             <lon units=\"deg\">36.8688</lon>",
+        "01:07:55:497| INFO |             <depth units=\"km\">9.3498</depth>",
+        "01:07:55:497| INFO |           </vertex>",
+        "01:07:55:497| INFO |         </vertices>",
+        "01:07:55:497| INFO |       </segment>",
+        "01:07:55:497| INFO |     </finite_fault>",
+        "01:07:55:497| INFO |   </fault_info>",
+        "01:07:55:498| INFO | ",
+        "01:07:55:498| INFO |   <gm_info>",
+        "01:07:55:498| INFO |     <gmpoint_obs>",
+        "01:07:55:498| INFO |       <pgv_obs number=\"2\">",
+        "01:07:55:498| INFO |         <obs assoc=\"true\" orig_sys=\"epic\">",
+        "01:07:55:498| INFO |           <SNCL>NAR.TU.HHZ.--</SNCL>",
+        "01:07:55:498| INFO |           <value units=\"cm/s\">0.4724</value>",
+        "01:07:55:498| INFO |           <lat units=\"deg\">37.3919</lat>",
+        "01:07:55:498| INFO |           <lon units=\"deg\">37.1574</lon>",
+        "01:07:55:498| INFO |           <time units=\"UTC\">2025-11-14T01:07:48.069Z</time>",
+        "01:07:55:498| INFO |         </obs>",
+        "01:07:55:498| INFO |         <obs assoc=\"true\" orig_sys=\"epic\">",
+        "01:07:55:498| INFO |           <SNCL>KAMA.TU.HHZ.--</SNCL>",
+        "01:07:55:498| INFO |           <value units=\"cm/s\">0.2648</value>",
+        "01:07:55:498| INFO |           <lat units=\"deg\">37.1861</lat>",
+        "01:07:55:498| INFO |           <lon units=\"deg\">36.6677</lon>",
+        "01:07:55:498| INFO |           <time units=\"UTC\">2025-11-14T01:07:49.239Z</time>",
+        "01:07:55:498| INFO |         </obs>",
+        "01:07:55:498| INFO |       </pgv_obs>",
+        "01:07:55:498| INFO |     </gmpoint_obs>",
+        "01:07:55:498| INFO |   </gm_info>",
+        "01:07:55:498| INFO | </event_message>",
+    ]
+    lines.extend(fault_info_block)
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
@@ -128,6 +210,7 @@ class TestGfastParser(unittest.TestCase):
         doc = parser.parse([str(GFAST_LOG)])
 
         self.assertGreater(len(doc.detections), 0)
+        detections_with_fault_info = []
         for det in doc.detections:
             self.assertIsInstance(det.timestamp, str)
             self.assertIsInstance(det.event_id, str)
@@ -152,11 +235,21 @@ class TestGfastParser(unittest.TestCase):
                 if obs.orig_sys is not None:
                     self.assertIsInstance(obs.orig_sys, str)
 
+            if det.fault_info:
+                detections_with_fault_info.append(det)
+                for vertex in det.fault_info:
+                    self.assertIsInstance(vertex.lat, str)
+                    self.assertIsInstance(vertex.lon, str)
+                    self.assertIsInstance(vertex.depth, str)
+
             self.assertIn("contributors", det.extra)
             self.assertIsInstance(det.extra["contributors"], list)
             for contrib in det.extra["contributors"]:
                 for value in contrib.values():
                     self.assertIsInstance(value, str)
+
+        if _use_synthetic_log():
+            self.assertGreater(len(detections_with_fault_info), 0)
 
     def test_xml_block_extraction_count(self):
         parser = GfastParser({"dialect": "shakealert"})
@@ -217,7 +310,7 @@ class TestGfastParser(unittest.TestCase):
 
         offline_dir = ROOT / "tmp" / "offline_output"
         offline_dir.mkdir(parents=True, exist_ok=True)
-        out_path = offline_dir / "gfast_eew_20251114.json"
+        out_path = offline_dir / "gfast_eew_20251114_testing.json"
         with open(out_path, "w", encoding="utf-8") as f:
             json.dump(doc.model_dump(), f, indent=2, ensure_ascii=False)
 

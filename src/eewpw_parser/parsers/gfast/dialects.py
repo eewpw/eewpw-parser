@@ -5,7 +5,14 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 from typing import List, Dict, Any, Optional, Tuple
 
-from eewpw_parser.schemas import Annotation, Detection, DetectionCore, GMObs, GMInfo
+from eewpw_parser.schemas import (
+    Annotation,
+    Detection,
+    DetectionCore,
+    FaultVertex,
+    GMObs,
+    GMInfo,
+)
 from eewpw_parser.config import load_profile
 
 
@@ -214,6 +221,7 @@ class GfastShakeAlertDialect:
         core_info_elem: Optional[ET.Element] = None
         gm_info_elem: Optional[ET.Element] = None
         contributors_elem: Optional[ET.Element] = None
+        fault_info_elem: Optional[ET.Element] = None
         other_children: List[ET.Element] = []
 
         for child in list(root):
@@ -224,6 +232,8 @@ class GfastShakeAlertDialect:
                 gm_info_elem = child
             elif tag == "contributors":
                 contributors_elem = child
+            elif tag == "fault_info":
+                fault_info_elem = child
             else:
                 other_children.append(child)
 
@@ -311,6 +321,28 @@ class GfastShakeAlertDialect:
 
         gm_info = GMInfo(pga_obs=pga_obs, pgv_obs=pgv_obs, extra=gm_extra)
 
+        fault_vertices: List[FaultVertex] = []
+        print(fault_info_elem)
+        print("====================")
+        if fault_info_elem is not None:
+            for elem in fault_info_elem.iter():
+                if _strip_ns(elem.tag) != "vertex":
+                    continue
+                lat = ""
+                lon = ""
+                depth_value = ""
+                for child in list(elem):
+                    tag = _strip_ns(child.tag)
+                    if tag == "lat":
+                        lat = _text(child)
+                    elif tag == "lon":
+                        lon = _text(child)
+                    elif tag == "depth":
+                        depth_value = _text(child)
+                fault_vertices.append(
+                    FaultVertex(lat=lat, lon=lon, depth=depth_value)
+                )
+
         contributors: List[Dict[str, str]] = []
         if contributors_elem is not None:
             for child in list(contributors_elem):
@@ -337,6 +369,7 @@ class GfastShakeAlertDialect:
             orig_sys=orig_sys,
             version=version,
             core_info=core_info,
+            fault_info=fault_vertices,
             gm_info=gm_info,
             extra=det_extra,
         )
@@ -402,7 +435,10 @@ class GfastShakeAlertDialect:
                             block = block[block.rfind("<event_message") :]
                         state.buffer = []
                         state.in_block = False
-                        detections.append(self._parse_event_message(block))
+                        try:
+                            detections.append(self._parse_event_message(block))
+                        except ET.ParseError:
+                            continue
             else:
                 if state.buffer == [_INCOMPLETE_SENTINEL]:
                     if has_end:
@@ -418,13 +454,16 @@ class GfastShakeAlertDialect:
                     state.in_block = True
                     if block.find("<event_message") != block.rfind("<event_message"):
                         block = block[block.rfind("<event_message") :]
-                    detections.append(
-                        self._parse_event_message(
-                            block,
-                            incomplete=True,
-                            incomplete_reason="truncated_xml_line",
+                    try:
+                        detections.append(
+                            self._parse_event_message(
+                                block,
+                                incomplete=True,
+                                incomplete_reason="truncated_xml_line",
+                            )
                         )
-                    )
+                    except ET.ParseError:
+                        continue
                     continue
                 if is_xmlish and buffer_ok:
                     state.buffer.append(normalized)
@@ -438,7 +477,10 @@ class GfastShakeAlertDialect:
                         block = block[block.rfind("<event_message") :]
                     state.buffer = []
                     state.in_block = False
-                    detections.append(self._parse_event_message(block))
+                    try:
+                        detections.append(self._parse_event_message(block))
+                    except ET.ParseError:
+                        continue
 
         if finalize and state.in_block:
             state.buffer = []
