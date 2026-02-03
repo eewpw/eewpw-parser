@@ -10,6 +10,32 @@ from eewpw_parser.config import load_profile
 
 
 _XML_DECL_RE = re.compile(r"<\?xml[^>]*\?>", flags=re.IGNORECASE)
+_INCOMPLETE_SENTINEL = "__incomplete_block__"
+
+
+def _autoclose_event_message(xml_text: str) -> str:
+    suffixes: List[str] = []
+
+    if xml_text.count("<obs") > xml_text.count("</obs>"):
+        suffixes.append("\n</obs>")
+    if "<pga_obs" in xml_text and "</pga_obs>" not in xml_text:
+        suffixes.append("\n</pga_obs>")
+    if "<pgv_obs" in xml_text and "</pgv_obs>" not in xml_text:
+        suffixes.append("\n</pgv_obs>")
+    if "<gmpoint_obs" in xml_text and "</gmpoint_obs>" not in xml_text:
+        suffixes.append("\n</gmpoint_obs>")
+    if "<gm_info" in xml_text and "</gm_info>" not in xml_text:
+        suffixes.append("\n</gm_info>")
+    if "<contributors" in xml_text and "</contributors>" not in xml_text:
+        suffixes.append("\n</contributors>")
+    if "<core_info" in xml_text and "</core_info>" not in xml_text:
+        suffixes.append("\n</core_info>")
+    if "</event_message>" not in xml_text:
+        suffixes.append("\n</event_message>")
+
+    if not suffixes:
+        return xml_text
+    return f"{xml_text}{''.join(suffixes)}"
 
 
 def _strip_ns(tag: str) -> str:
@@ -154,9 +180,27 @@ class GfastShakeAlertDialect:
             extra=obs_extra,
         )
 
-    def _parse_event_message(self, xml_text: str) -> Detection:
+    def _parse_event_message(
+        self, xml_text: str, incomplete: bool = False, incomplete_reason: str = ""
+    ) -> Detection:
         cleaned = _XML_DECL_RE.sub("", xml_text).strip()
-        root = ET.fromstring(cleaned)
+        sanitized = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f]", "", cleaned)
+        event_idx = sanitized.find("<event_message")
+        if event_idx > 0:
+            sanitized = sanitized[event_idx:]
+        if incomplete:
+            sanitized = _autoclose_event_message(sanitized)
+        try:
+            root = ET.fromstring(sanitized)
+        except ET.ParseError as err:
+            offending_line = ""
+            if err.position:
+                line_idx = err.position[0] - 1
+                lines = sanitized.splitlines()
+                if 0 <= line_idx < len(lines):
+                    offending_line = lines[line_idx]
+            print(f"GFAST XML parse error line {err.position[0]}: {repr(offending_line)}")
+            raise
 
         attrs = dict(root.attrib)
         timestamp = attrs.pop("timestamp", "")
@@ -285,7 +329,7 @@ class GfastShakeAlertDialect:
                 for child in other_children
             ]
 
-        return Detection(
+        det = Detection(
             timestamp=timestamp,
             event_id=event_id,
             category=category,
@@ -296,6 +340,10 @@ class GfastShakeAlertDialect:
             gm_info=gm_info,
             extra=det_extra,
         )
+        if incomplete:
+            det.extra["xml_incomplete"] = "true"
+            det.extra["xml_incomplete_reason"] = incomplete_reason
+        return det
 
     def parse_stream(
         self,
@@ -333,19 +381,61 @@ class GfastShakeAlertDialect:
             if normalized is None:
                 continue
 
+            stripped = normalized.strip()
+            buffer_ok = stripped == "" or re.search(r"<\s*[/?!A-Za-z]", stripped)
+            has_start = "<?xml" in normalized or "<event_message" in normalized
+            has_end = "</event_message>" in normalized
+
             if not state.in_block:
-                if "<?xml" in normalized or "<event_message" in normalized:
+                if has_start:
                     state.in_block = True
-                    state.buffer = [normalized]
-                    if "</event_message>" in normalized:
+                    state.buffer = []
+                    if buffer_ok:
+                        state.buffer.append(normalized)
+                    if has_end:
                         block = "\n".join(state.buffer)
+                        if "<event_message" not in block:
+                            state.buffer = []
+                            state.in_block = False
+                            continue
+                        if block.find("<event_message") != block.rfind("<event_message"):
+                            block = block[block.rfind("<event_message") :]
                         state.buffer = []
                         state.in_block = False
                         detections.append(self._parse_event_message(block))
             else:
-                state.buffer.append(normalized)
-                if "</event_message>" in normalized:
+                if state.buffer == [_INCOMPLETE_SENTINEL]:
+                    if has_end:
+                        state.buffer = []
+                        state.in_block = False
+                    continue
+                xml_line = normalized.lstrip()
+                is_xmlish = xml_line.startswith("<") or xml_line.strip() == ""
+                is_truncated_xml = xml_line.strip() == "<"
+                if is_truncated_xml:
                     block = "\n".join(state.buffer)
+                    state.buffer = [_INCOMPLETE_SENTINEL]
+                    state.in_block = True
+                    if block.find("<event_message") != block.rfind("<event_message"):
+                        block = block[block.rfind("<event_message") :]
+                    detections.append(
+                        self._parse_event_message(
+                            block,
+                            incomplete=True,
+                            incomplete_reason="truncated_xml_line",
+                        )
+                    )
+                    continue
+                if is_xmlish and buffer_ok:
+                    state.buffer.append(normalized)
+                if has_end:
+                    block = "\n".join(state.buffer)
+                    if "<event_message" not in block:
+                        state.buffer = []
+                        state.in_block = False
+                        continue
+                    if block.find("<event_message") != block.rfind("<event_message"):
+                        block = block[block.rfind("<event_message") :]
                     state.buffer = []
                     state.in_block = False
                     detections.append(self._parse_event_message(block))
