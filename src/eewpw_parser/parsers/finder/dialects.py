@@ -48,6 +48,8 @@ class FinderStreamState:
     legacy_update_index: int = 0
     pending_solution_event_id: Optional[str] = None
     pending_solution_fields: Optional[Dict[str, str]] = None
+    pending_solution_has_rupture: bool = False
+    pending_solution_has_coords: bool = False
 
 
 class FinderBaseDialect:
@@ -1384,6 +1386,47 @@ class NativeFinderDialect(FinderBaseDialect):
         last_detection_index = state.last_detection_index
         last_detection_event_id = state.last_detection_event_id
 
+        def pending_solution_complete() -> bool:
+            return bool(
+                state.pending_solution_fields
+                and state.pending_solution_has_rupture
+                and state.pending_solution_has_coords
+            )
+
+        def reset_pending_solution() -> None:
+            state.pending_solution_fields = None
+            state.pending_solution_has_rupture = False
+            state.pending_solution_has_coords = False
+
+        def start_pending_solution(line_txt: str, tail_txt: str) -> None:
+            fields: Dict[str, str] = {}
+            mver = self.P_SOL_RUP_VERSION.search(line_txt)
+            if mver:
+                fields["Version"] = str(mver.group(1))
+            mts = self.P_SOL_RUP_TIME_SINCE.search(tail_txt)
+            if mts:
+                fields["Time since object creation"] = str(mts.group(1))
+            for part in tail_txt.split(","):
+                part = part.strip()
+                if "=" in part:
+                    k, v = part.split("=", 1)
+                    k = trim(k)
+                    if self.P_SOL_RUP_LEGACY_TIME_KEY.match(k):
+                        continue
+                    fields[k] = trim(v)
+            state.pending_solution_fields = fields
+            state.pending_solution_has_rupture = True
+            state.pending_solution_has_coords = False
+
+        def add_pending_solution_coords(tail_txt: str) -> None:
+            if not state.pending_solution_fields or not state.pending_solution_has_rupture:
+                return
+            for kv in tail_txt.split(","):
+                if "=" in kv:
+                    k, v = kv.split("=", 1)
+                    state.pending_solution_fields[trim(k)] = trim(v)
+            state.pending_solution_has_coords = True
+
         def attach_to_last(stations: List[tuple]) -> bool:
             nonlocal dets, last_detection_index
             if last_detection_index is None:
@@ -1477,10 +1520,24 @@ class NativeFinderDialect(FinderBaseDialect):
             finder_length_llk_list: Optional[List[FinderLengthLLK]] = None
             finder_pdf: Dict[str, List[Dict[str, str]]] = {}
             emission_ts_iso: Optional[str] = None
+            solution_fields: Dict[str, str] = {}
+            rupture_found = False
+            coords_found = False
+            attached_pending_solution = False
+            pending_solution_updated = False
+
+            if pending_solution_complete():
+                solution_fields = dict(state.pending_solution_fields or {})
+                rupture_found = True
+                coords_found = True
+                attached_pending_solution = True
+                pending_version = solution_fields.get("Version")
+                if pending_version is not None:
+                    version_by_event[event_id] = str(pending_version)
 
             if state.recent_lines or i > 0:
                 current_abs_line = state.line_offset + i + 1
-                if state.recent_lines and state.recent_lines[0][0] < current_abs_line:
+                if state.recent_lines and (i == 0 or state.recent_lines[0][0] < current_abs_line):
                     recent_lines_iter = [
                         prev_line
                         for line_no, prev_line in reversed(state.recent_lines)
@@ -1499,6 +1556,35 @@ class NativeFinderDialect(FinderBaseDialect):
                             m_tpl_prev = self.P_TEMPLATE_ID.match(msg_prev)
                         if m_tpl_prev:
                             template_id = (m_tpl_prev.group(1) or "").strip()
+                    # SOLUTION RUPTURE
+                    m_rup_line_b = self.P_SOL_RUP_LINE.search(prev_line)
+                    if m_rup_line_b and not rupture_found:
+                        tail = m_rup_line_b.group(1)
+                        mver_b = self.P_SOL_RUP_VERSION.search(prev_line)
+                        if mver_b:
+                            version_by_event[event_id] = str(mver_b.group(1))
+                            solution_fields["Version"] = str(mver_b.group(1))
+                        mts_b = self.P_SOL_RUP_TIME_SINCE.search(tail)
+                        if mts_b:
+                            solution_fields["Time since object creation"] = str(mts_b.group(1))
+                        for part in tail.split(","):
+                            part = part.strip()
+                            if "=" in part:
+                                k, v = part.split("=", 1)
+                                k = trim(k)
+                                if self.P_SOL_RUP_LEGACY_TIME_KEY.match(k):
+                                    continue
+                                solution_fields[k] = trim(v)
+                        rupture_found = True
+                    # SOLUTION COORDINATES
+                    m_coords_b = self.P_SOL_COORDS.search(prev_line)
+                    if m_coords_b and not coords_found:
+                        tail = m_coords_b.group(1)
+                        for kv in tail.split(","):
+                            if "=" in kv:
+                                k, v = kv.split("=", 1)
+                                solution_fields[trim(k)] = trim(v)
+                        coords_found = True
 
             j = i + 1
             next_event_idx: Optional[int] = None
@@ -1547,6 +1633,15 @@ class NativeFinderDialect(FinderBaseDialect):
                 if self.P_EVENT_ID.search(s):
                     next_event_idx = j
                     break
+
+                m_pending_rup = self.P_SOL_RUP_LINE.search(s)
+                if m_pending_rup:
+                    start_pending_solution(s, m_pending_rup.group(1))
+                    pending_solution_updated = True
+
+                m_pending_coords = self.P_SOL_COORDS.search(s)
+                if m_pending_coords:
+                    add_pending_solution_coords(m_pending_coords.group(1))
 
                 if not emission_ts_iso:
                     mp = self.P_PREFIX_TS.search(s)
@@ -1697,6 +1792,7 @@ class NativeFinderDialect(FinderBaseDialect):
                 get_lik=get_lik,
                 get_otm=get_otm,
                 get_azm=get_azm,
+                solution=solution_fields or None,
                 template_id=template_id,
                 centroid=centroid,
                 rupture_list=finder_rupture_list,
@@ -1724,6 +1820,9 @@ class NativeFinderDialect(FinderBaseDialect):
 
             last_detection_index = len(dets) - 1
             last_detection_event_id = str(event_id)
+
+            if attached_pending_solution and not pending_solution_updated:
+                reset_pending_solution()
 
             if pending_station_list:
                 if not attach_to_last(pending_station_list):
