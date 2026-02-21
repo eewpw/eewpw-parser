@@ -28,7 +28,7 @@ class TestFinderLegacyShellCounts(unittest.TestCase):
     def test_counts_align_with_shell_markers(self):
         if not LOG_PATH.exists():
             self.skipTest(f"missing local log file: {LOG_PATH}")
-        expected_det = int(_run_cmd(f"grep -c '^Timestamp =' {LOG_PATH}"))
+        expected_det = int(_run_cmd(f"grep -F -c -- '-> event_id' {LOG_PATH}"))
         first_line = _run_cmd(f"grep -m1 '^Timestamp =' {LOG_PATH}")
         seed_epoch = int(first_line.split()[-1])
         expected_pga = int(_run_cmd(f"grep -c 'include = 1' {LOG_PATH}"))

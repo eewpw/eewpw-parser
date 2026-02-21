@@ -467,6 +467,14 @@ class FinderBaseDialect:
 
     def _should_continue_after_station_header(self) -> bool:
         return False
+
+    def _should_emit_detection(
+        self,
+        explicit_event_id_seen: bool,
+        event_id: str,
+        state: FinderStreamState,
+    ) -> bool:
+        return True
     
     def _parse_detections(self, lines: List[str]) -> List[Detection]:
         """
@@ -617,6 +625,7 @@ class FinderBaseDialect:
                 continue
 
             event_id = m_eid
+            explicit_event_id_seen = bool(self.P_EVENT_ID.search(line))
 
             get_mag = get_lat = get_lon = get_dep = get_lik = get_otm = get_azm = None
             get_mag_unc = get_lat_unc = get_lon_unc = get_dep_unc = get_otm_unc = None
@@ -788,6 +797,7 @@ class FinderBaseDialect:
                 if m_event_line:
                     event_id = m_event_line.group(1)
                     state.last_detection_event_id = event_id
+                    explicit_event_id_seen = True
 
                 if not emission_ts_iso:
                     mp = self.P_PREFIX_TS.search(s)
@@ -955,6 +965,10 @@ class FinderBaseDialect:
                     state.pending_solution_event_id = event_id
                     state.pending_solution_fields = dict(solution_fields)
                 return dets, i
+
+            if not self._should_emit_detection(explicit_event_id_seen, str(event_id), state):
+                i = block_end
+                continue
 
             if get_otm is None:
                 core = DetectionCore(
@@ -1891,6 +1905,14 @@ class NativeFinderLegacyDialect(FinderBaseDialect):
     def _is_new_detection_line(self, line: str) -> bool:
         # Legacy logs rely on Timestamp cadence; event_id lines should not start new detections.
         return bool(self.P_TS_EPOCH.search(line))
+
+    def _should_emit_detection(
+        self,
+        explicit_event_id_seen: bool,
+        event_id: str,
+        state: FinderStreamState,
+    ) -> bool:
+        return explicit_event_id_seen
 
     def _pick_detection_timestamp(
         self,
