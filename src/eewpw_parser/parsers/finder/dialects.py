@@ -46,6 +46,8 @@ class FinderStreamState:
     last_detection_event_id: Optional[str] = None
     legacy_seed_epoch: Optional[int] = None
     legacy_update_index: int = 0
+    pending_solution_event_id: Optional[str] = None
+    pending_solution_fields: Optional[Dict[str, str]] = None
 
 
 class FinderBaseDialect:
@@ -79,6 +81,10 @@ class FinderBaseDialect:
     P_SOL_COORDS = re.compile(r"SOLUTION COORDINATES:\s*(.*)")
     P_SOL_RUP_LINE = re.compile(r"(?:\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}[:.]\d{1,6}\s+)?SOLUTION RUPTURE:\s*(.*)")
     P_SOL_RUP_VERSION = re.compile(r"\bVersion\s+(\d+)\b")
+    P_SOL_RUP_TIME_SINCE = re.compile(
+        r"Version\s+\d+\s+Time since object creation\s*=\s*([-+]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?)"
+    )
+    P_SOL_RUP_LEGACY_TIME_KEY = re.compile(r"^Version\s+\d+\s+Time since object creation$")
         
     # Stations header and row (include=1 only)
     P_STATION_HEADER = re.compile(r"The stations that exceeded the minimum threshold|Stations with PGA above the min threshold")
@@ -625,12 +631,14 @@ class FinderBaseDialect:
             emission_ts_iso: Optional[str] = None
             solution_fields: Dict[str, str] = {}
             finder_flags: Dict[str, str] = {}
+            rupture_found = False
+            coords_found = False
 
             # Look back a bit to capture SOLUTION lines and flags that often
             # precede the explicit event_id marker in scfinder logs.
             if state.recent_lines or i > 0:
                 current_abs_line = state.line_offset + i + 1
-                if state.recent_lines and state.recent_lines[0][0] < current_abs_line:
+                if state.recent_lines and (i == 0 or state.recent_lines[0][0] < current_abs_line):
                     recent_lines_iter = [
                         prev_line
                         for line_no, prev_line in reversed(state.recent_lines)
@@ -651,25 +659,33 @@ class FinderBaseDialect:
                             template_id = (m_tpl_prev.group(1) or "").strip()
                     # SOLUTION RUPTURE
                     m_rup_line_b = self.P_SOL_RUP_LINE.search(prev_line)
-                    if m_rup_line_b:
+                    if m_rup_line_b and not rupture_found:
                         tail = m_rup_line_b.group(1)
                         mver_b = self.P_SOL_RUP_VERSION.search(prev_line)
                         if mver_b:
                             version_by_event[event_id] = str(mver_b.group(1))
                             solution_fields["Version"] = str(mver_b.group(1))
+                        mts_b = self.P_SOL_RUP_TIME_SINCE.search(tail)
+                        if mts_b:
+                            solution_fields["Time since object creation"] = str(mts_b.group(1))
                         for part in tail.split(","):
                             part = part.strip()
                             if "=" in part:
                                 k, v = part.split("=", 1)
-                                solution_fields[trim(k)] = trim(v)
+                                k = trim(k)
+                                if self.P_SOL_RUP_LEGACY_TIME_KEY.match(k):
+                                    continue
+                                solution_fields[k] = trim(v)
+                        rupture_found = True
                     # SOLUTION COORDINATES
                     m_coords_b = self.P_SOL_COORDS.search(prev_line)
-                    if m_coords_b:
+                    if m_coords_b and not coords_found:
                         tail = m_coords_b.group(1)
                         for kv in tail.split(","):
                             if "=" in kv:
                                 k, v = kv.split("=", 1)
                                 solution_fields[trim(k)] = trim(v)
+                        coords_found = True
                     # SOLUTION TEMPLATE
                     m_tpl_b = self.P_SOL_TPL.search(prev_line)
                     if m_tpl_b:
@@ -678,6 +694,13 @@ class FinderBaseDialect:
                     m_flag_b = re.search(r"process:\s*initial\s*finder_flags_new\.(\w+)\s*=\s*(\S+)", prev_line)
                     if m_flag_b:
                         finder_flags[m_flag_b.group(1)] = trim(m_flag_b.group(2))
+
+            if (
+                not solution_fields
+                and state.pending_solution_event_id == event_id
+                and state.pending_solution_fields
+            ):
+                solution_fields = dict(state.pending_solution_fields)
 
             j = i + 1
             next_event_idx: Optional[int] = None
@@ -865,12 +888,18 @@ class FinderBaseDialect:
                     if mver:
                         version_by_event[event_id] = str(mver.group(1))
                         solution_fields["Version"] = str(mver.group(1))
+                    mts = self.P_SOL_RUP_TIME_SINCE.search(tail)
+                    if mts:
+                        solution_fields["Time since object creation"] = str(mts.group(1))
                     # key=value pairs separated by commas
                     for part in tail.split(","):
                         part = part.strip()
                         if "=" in part:
                             k, v = part.split("=", 1)
-                            solution_fields[trim(k)] = trim(v)
+                            k = trim(k)
+                            if self.P_SOL_RUP_LEGACY_TIME_KEY.match(k):
+                                continue
+                            solution_fields[k] = trim(v)
 
                 # Parse SOLUTION TEMPLATE filename
                 m_tpl = self.P_SOL_TPL.search(s)
@@ -920,6 +949,9 @@ class FinderBaseDialect:
 
             if not finalize and block_end >= len(lines):
                 state.pending_station_list = pending_station_list
+                if solution_fields:
+                    state.pending_solution_event_id = event_id
+                    state.pending_solution_fields = dict(solution_fields)
                 return dets, i
 
             if get_otm is None:
@@ -1013,6 +1045,10 @@ class FinderBaseDialect:
                     finder_details=finder_details,
                 )
             )
+
+            if state.pending_solution_event_id == event_id:
+                state.pending_solution_event_id = None
+                state.pending_solution_fields = None
 
             i = block_end
 
