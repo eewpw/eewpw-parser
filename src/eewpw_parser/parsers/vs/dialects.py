@@ -72,7 +72,14 @@ class VSEventState:
     stations_not_used: List[str] = field(default_factory=list)
     summary_fields: Dict[str, str] = field(default_factory=dict)
 
-    def start_station(self, sncl: str, wavetype: str, soil_class: str, magnitude: Optional[float]):
+    def start_station(
+        self,
+        sncl: str,
+        wavetype: str,
+        soil_class: str,
+        magnitude: Optional[float],
+        magnitude_raw: Optional[str] = None,
+    ):
         if self.current_station:
             self.flush_station()
         self.current_station = {
@@ -81,6 +88,7 @@ class VSEventState:
             "wavetype": wavetype.strip(),
             "soil": soil_class.strip(),
             "magnitude": magnitude,
+            "magnitude_raw": magnitude_raw,
             "lat": None,
             "lon": None,
             "pga_h": None,
@@ -155,13 +163,22 @@ class VSEventState:
             lon = st.get("lon")
             if lat is None or lon is None:
                 continue
+            station_magnitude = None
+            if st.get("magnitude") is not None:
+                station_magnitude = str(st.get("magnitude"))
+            else:
+                mag_raw = st.get("magnitude_raw")
+                if isinstance(mag_raw, str) and mag_raw.strip().lower() == "nan":
+                    station_magnitude = "nan"
+
             vs_meta_base = {
                 "component": None,
-                "station_magnitude": str(st.get("magnitude")) if st.get("magnitude") is not None else None,
                 "wavetype": st.get("wavetype"),
                 "soil_class": st.get("soil"),
                 "epi_dist_km": str(st.get("epi_dist_km")) if st.get("epi_dist_km") is not None else None,
             }
+            if station_magnitude is not None:
+                vs_meta_base["station_magnitude"] = station_magnitude
 
             def add_obs(val, sentinel_raw, lst: List[GMObs], component: str):
                 meta = dict(vs_meta_base)
@@ -405,8 +422,9 @@ class VSDialect:
             sncl = m.group(1)
             wavetype = m.group(2)
             soil = m.group(3)
-            mag = _safe_float(m.group(4))
-            ev.start_station(sncl, wavetype, soil, mag)
+            mag_raw = m.group(4)
+            mag = _safe_float(mag_raw)
+            ev.start_station(sncl, wavetype, soil, mag, mag_raw.strip() if isinstance(mag_raw, str) else None)
 
         if (m := self.P_STATION_LOC.search(message)) and ev.current_station:
             ev.current_station["lat"] = _safe_float(m.group(1))

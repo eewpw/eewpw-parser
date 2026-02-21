@@ -71,7 +71,12 @@ def main():
         ensure_ascii = bool(cfg.get("output", {}).get("ensure_ascii", False))
 
         with open(args.output, "w", encoding="utf-8") as f:
-            json.dump(doc.model_dump(), f, indent=indent if pretty else None, ensure_ascii=ensure_ascii)
+            json.dump(
+                doc.model_dump(exclude_none=True),
+                f,
+                indent=indent if pretty else None,
+                ensure_ascii=ensure_ascii,
+            )
         print(f"Wrote {args.output}")
     elif args.mode == "stream-jsonl":
         from eewpw_parser.sinks import JsonlStreamSink

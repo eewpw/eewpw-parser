@@ -10,6 +10,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from eewpw_parser.parsers.epic.epic_parser import EpicParser
 from eewpw_parser.parsers.epic.dialects import EpicShakeAlertDialect, EpicStreamState
+from eewpw_parser.schemas import FinalDoc
 
 
 EPIC_LOG = ROOT / "example-log-files/epic_shakealert/epic_20251113_14.log"
@@ -73,6 +74,19 @@ class TestEpicParser(unittest.TestCase):
                     in_block = False
 
         self.assertEqual(count, len(doc.detections))
+
+    def test_epic_serialization_excludes_none_core_info(self):
+        parser = EpicParser({"dialect": "shakealert"})
+        doc = parser.parse([str(EPIC_LOG)])
+
+        payload = doc.model_dump(exclude_none=True)
+        FinalDoc.model_validate(payload)
+
+        for det in payload["detections"]:
+            core_info = det.get("core_info", {})
+            self.assertNotIn("vs_median_single_station_mag", core_info)
+            for value in core_info.values():
+                self.assertIsNotNone(value)
 
     def test_wall_clock_rollover_and_xml_timestamp(self):
         parser = EpicParser({"dialect": "shakealert"})
@@ -151,7 +165,7 @@ class TestEpicParser(unittest.TestCase):
         offline_dir.mkdir(parents=True, exist_ok=True)
         out_path = offline_dir / "epic_20251113_14.json"
         with open(out_path, "w", encoding="utf-8") as f:
-            json.dump(doc.model_dump(), f, indent=2, ensure_ascii=False)
+            json.dump(doc.model_dump(exclude_none=True), f, indent=2, ensure_ascii=False)
 
         self.assertTrue(out_path.exists())
         self.assertGreater(out_path.stat().st_size, 0)

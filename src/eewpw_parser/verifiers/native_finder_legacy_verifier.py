@@ -40,7 +40,7 @@ def verify_native_finder_legacy(
     doc = parser.parse([str(log_path)])
 
     with out_path.open("w", encoding="utf-8") as fh:
-        json.dump(doc.model_dump(), fh, ensure_ascii=False)
+        json.dump(doc.model_dump(exclude_none=True), fh, ensure_ascii=False)
 
     detections = doc.detections
     if len(detections) != expected_det:
