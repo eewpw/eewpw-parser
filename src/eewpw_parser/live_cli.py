@@ -2,18 +2,25 @@
 import argparse
 from pathlib import Path
 
-from eewpw_parser.config import load_config, get_data_root, config_filename_for_algo
+from eewpw_parser.config import load_global_config, get_data_root
 from eewpw_parser.config_loader import set_config_root_override
 from eewpw_parser.sources import TailLineSource
 from eewpw_parser.live_engine import LiveEngine
 from eewpw_parser.parsers.finder.finder_parser import FinderParser
 from eewpw_parser.parsers.vs.dialects import VSDialect
+from eewpw_parser.parsers.plum.plum_parser import PlumParser
+from eewpw_parser.parsers.epic.epic_parser import EpicParser
 
 
 def main():
     ap = argparse.ArgumentParser(description="EEWPW live parser (tail + stream per-event JSONL)")
-    ap.add_argument("--algo", required=True, choices=["finder", "vs"], help="Algorithm to parse")
-    ap.add_argument("--dialect", default=None, help="Dialect (e.g., scfinder, scvsmag)")
+    ap.add_argument(
+        "--algo",
+        required=True,
+        choices=["finder", "vs", "plum", "epic", "gfast", "eqinfo"],
+        help="Algorithm to parse",
+    )
+    ap.add_argument("--dialect", required=True, help="Dialect (e.g., scfinder, scvsmag)")
     ap.add_argument("--instance", default=None, help="Instance identifier (e.g., finder@host1)")
     ap.add_argument("--logfile", required=True, help="Path to log file to tail")
     ap.add_argument("--output-dir", help="Directory to write live JSONL files (deprecated, treated as data_root)")
@@ -29,10 +36,9 @@ def main():
     if args.config_root is not None:
         set_config_root_override(args.config_root)
 
-    cfg_path = config_filename_for_algo(args.algo)
-    cfg = load_config(cfg_path)
-    if args.dialect:
-        cfg["dialect"] = args.dialect
+    cfg = load_global_config()
+    cfg["algo"] = args.algo
+    cfg["dialect"] = args.dialect
     cfg["verbose"] = args.verbose
 
     instance = args.instance or f"{args.algo}@unknown"
@@ -59,6 +65,14 @@ def main():
         if hasattr(worker, "verbose"):
             worker.verbose = bool(args.verbose)
         parser = worker
+    elif args.algo == "plum":
+        parser = PlumParser(cfg)
+    elif args.algo == "epic":
+        parser = EpicParser(cfg)
+    elif args.algo == "gfast":
+        raise SystemExit("gfast live streaming is not supported")
+    elif args.algo == "eqinfo":
+        raise SystemExit("eqinfo live streaming is not supported")
     else:
         raise SystemExit(f"Unsupported algo: {args.algo}")
 

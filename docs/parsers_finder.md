@@ -8,7 +8,7 @@ Finder parsing lives in `src/eewpw_parser/parsers/finder/` and is orchestrated b
 - `NativeFinderDialect`: direct Finder output with per-line timestamps.
 - `NativeFinderLegacyDialect`: legacy Finder without per-line wall-clock stamps; falls back to epoch timestamps inside detection blocks.
 
-`FinderParser.parse(inputs)` collects detections/annotations from each file, merges them, sorts by detection timestamp, derives meta timing from per-file extras, and returns a `FinalDoc`.
+`FinderParser.parse(inputs)` collects detections/annotations from each file, merges them, sorts by detection timestamp, derives meta timing from per-file extra metadata, and returns a `FinalDoc`.
 
 `FinderParser.parse(inputs, sink=None)` also supports streaming: when a sink is provided, detections/annotations are emitted to the sink as they are parsed; meta is finalized at the end and no `FinalDoc` is returned.
 
@@ -21,6 +21,24 @@ Finder parsing lives in `src/eewpw_parser/parsers/finder/` and is orchestrated b
   - Stations that exceeded thresholds are parsed from station tables (`P_STATION_HEADER` + `P_STATION_ROW`) and attached as `pga_obs`. Native Finder attaches station tables to the most recent detection (logs often emit the table after the summary), while other dialects attach to the next detection.
 - Versioning is tracked per `event_id` to reflect successive updates in the log stream.
 - Dialects can override `_pick_detection_timestamp` to choose wall-clock vs origin/epoch timestamps (used by the legacy native dialect).
+
+## Finder block headers (scfinder, native)
+
+Finder logs can include explicit Finder block headers that are parsed into `finder_details`:
+- `Template_id = ...` → `finder_details.template_id` (empty string allowed when header present).
+- `Finder centroid = lat/lon[/depth]` → `finder_details.centroid` (`FaultVertex`, does not override `core_info`).
+- `Finder rupture list = ...` → `finder_details.rupture_list` (list of `FaultVertex`).
+- `Finder azimuth list = ...` → `finder_details.azimuth_list` (list of `{azimuth, value}`).
+- `Finder length list = ...` → `finder_details.length_list` (list of `{length, value}`).
+- `Finder azimuth llk list = ...` → `finder_details.azimuth_llk_list` (list of `{azimuth, llk}`).
+- `Finder length llk list = ...` → `finder_details.length_llk_list` (list of `{length, llk}`).
+- `Finder <name> pdf =` → `finder_details.extra["pdf"][key]`, where `key` is `<name>` lowercased and whitespace-normalized to underscores. Rows are `lat/lon,value` pairs stored as `{lat, lon, value}` strings.
+
+Parsing rules:
+- Each dialect first normalizes lines by stripping dialect-specific prefixes/timestamps; header matching happens on the normalized message.
+- Multi-line consumption starts only after an explicit header and terminates on a blank line, any new header (`^Finder .*=` or `^Template_id\s*=`), a non-matching row line (fail-closed), or EOF.
+- If a list header is present but no rows are parsed, the corresponding list is stored as an empty list (not `None`).
+- If a pdf header is present but no valid rows are parsed, that key is omitted; `pdf` is omitted entirely when no keys are stored.
 
 ## Annotations
 

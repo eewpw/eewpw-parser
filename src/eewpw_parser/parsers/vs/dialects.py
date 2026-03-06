@@ -3,7 +3,14 @@ import re
 from dataclasses import dataclass, field
 from typing import List, Tuple, Dict, Any, Optional
 
-from eewpw_parser.schemas import Detection, DetectionCore, FaultVertex, GMObs, Annotation
+from eewpw_parser.schemas import (
+    Annotation,
+    Detection,
+    DetectionCore,
+    FaultVertex,
+    GMObs,
+    VSDetails,
+)
 from eewpw_parser.utils import to_iso_utc_z
 from eewpw_parser.config import load_profile
 from collections import deque
@@ -38,6 +45,15 @@ def parse_optional_float(value: Optional[str]) -> Optional[float]:
     return float(raw)
 
 
+def _parse_gm_field(raw: str):
+    txt = raw.strip()
+    if txt.lower() == "nan":
+        return None, None
+    if txt == "-1.00e+00":
+        return None, "-1.00e+00"
+    return float(txt), None
+
+
 @dataclass
 class VSEventState:
     event_id: Optional[str] = None
@@ -53,20 +69,51 @@ class VSEventState:
     last_ts_iso: Optional[str] = None
     stations: List[Dict[str, Any]] = field(default_factory=list)
     current_station: Optional[Dict[str, Any]] = None
+    stations_not_used: List[str] = field(default_factory=list)
+    summary_fields: Dict[str, str] = field(default_factory=dict)
 
-    def start_station(self, sncl: str, wavetype: str, soil_class: str, magnitude: Optional[float]):
+    def start_station(
+        self,
+        sncl: str,
+        wavetype: str,
+        soil_class: str,
+        magnitude: Optional[float],
+        magnitude_raw: Optional[str] = None,
+    ):
         if self.current_station:
             self.flush_station()
         self.current_station = {
             "sncl": sncl.strip(),
+            "component": None,
             "wavetype": wavetype.strip(),
             "soil": soil_class.strip(),
             "magnitude": magnitude,
+            "magnitude_raw": magnitude_raw,
             "lat": None,
             "lon": None,
             "pga_h": None,
+            "pgv_h": None,
+            "pgd_h": None,
             "pga_z": None,
+            "pgv_z": None,
+            "pgd_z": None,
+            "pga_h_val": None,
+            "pgv_h_val": None,
+            "pgd_h_val": None,
+            "pga_z_val": None,
+            "pgv_z_val": None,
+            "pgd_z_val": None,
+            "pga_h_sentinel_raw": None,
+            "pgv_h_sentinel_raw": None,
+            "pgd_h_sentinel_raw": None,
+            "pga_z_sentinel_raw": None,
+            "pgv_z_sentinel_raw": None,
+            "pgd_z_sentinel_raw": None,
+            "epi_dist_km": None,
         }
+        parts = sncl.split(".")
+        if len(parts) >= 3 and parts[2]:
+            self.current_station["component"] = parts[2]
 
     def flush_station(self):
         if not self.current_station:
@@ -84,7 +131,7 @@ class VSEventState:
         version = (
             int(self.update_number)
             if self.update_number is not None
-            else version_by_event.get(self.event_id or "", 0) + 1
+            else version_by_event.get(self.event_id or "", 0)
         )
         if self.event_id:
             version_by_event[self.event_id] = version
@@ -95,7 +142,7 @@ class VSEventState:
             or self.last_ts_iso
             or to_iso_utc_z("1970-01-01T00:00:00Z")
         )
-        timestamp = self.last_ts_iso or self.creation_time or orig_time
+        timestamp = self.creation_time or self.last_ts_iso or orig_time
 
         core = DetectionCore(
             id=str(self.event_id or "0"),
@@ -109,24 +156,87 @@ class VSEventState:
         )
 
         pga_list: List[GMObs] = []
+        pgv_list: List[GMObs] = []
+        pgd_list: List[GMObs] = []
         for st in self.stations:
-            pga_val = st.get("pga_h") if st.get("pga_h") is not None else st.get("pga_z")
-            if pga_val is None:
-                continue
             lat = st.get("lat")
             lon = st.get("lon")
             if lat is None or lon is None:
                 continue
-            pga_list.append(
-                GMObs(
-                    orig_sys="vs",
-                    SNCL=st.get("sncl", ""),
-                    value=str(pga_val),
-                    lat=str(lat),
-                    lon=str(lon),
-                    time=timestamp,
+            station_magnitude = None
+            if st.get("magnitude") is not None:
+                station_magnitude = str(st.get("magnitude"))
+            else:
+                mag_raw = st.get("magnitude_raw")
+                if isinstance(mag_raw, str) and mag_raw.strip().lower() == "nan":
+                    station_magnitude = "nan"
+
+            vs_meta_base = {
+                "component": None,
+                "wavetype": st.get("wavetype"),
+                "soil_class": st.get("soil"),
+                "epi_dist_km": str(st.get("epi_dist_km")) if st.get("epi_dist_km") is not None else None,
+            }
+            if station_magnitude is not None:
+                vs_meta_base["station_magnitude"] = station_magnitude
+
+            def add_obs(val, sentinel_raw, lst: List[GMObs], component: str):
+                meta = dict(vs_meta_base)
+                meta["component"] = component
+                if sentinel_raw is not None:
+                    meta["is_sentinel"] = True
+                    meta["raw_value"] = sentinel_raw
+                    lst.append(
+                        GMObs(
+                            orig_sys="vs",
+                            SNCL=st.get("sncl", ""),
+                            value=sentinel_raw,
+                            lat=str(lat),
+                            lon=str(lon),
+                            time=timestamp,
+                            extra={"vs": meta},
+                        )
+                    )
+                    return
+                if val is None:
+                    return
+                lst.append(
+                    GMObs(
+                        orig_sys="vs",
+                        SNCL=st.get("sncl", ""),
+                        value=str(val),
+                        lat=str(lat),
+                        lon=str(lon),
+                        time=timestamp,
+                        extra={"vs": meta},
+                    )
                 )
-            )
+
+            def val_pair(name: str):
+                val = st.get(f"{name}_val")
+                sentinel_raw = st.get(f"{name}_sentinel_raw")
+                if val is None and sentinel_raw is None:
+                    val = st.get(name)
+                return val, sentinel_raw
+
+            add_obs(*val_pair("pga_z"), pga_list, component="Z")
+            add_obs(*val_pair("pga_h"), pga_list, component="H")
+            add_obs(*val_pair("pgv_z"), pgv_list, component="Z")
+            add_obs(*val_pair("pgv_h"), pgv_list, component="H")
+            add_obs(*val_pair("pgd_z"), pgd_list, component="Z")
+            add_obs(*val_pair("pgd_h"), pgd_list, component="H")
+
+        summary = dict(self.summary_fields)
+        if self.update_number is not None:
+            summary.setdefault("update_number", str(self.update_number))
+        if self.likelihood is not None:
+            summary.setdefault("likelihood", str(self.likelihood))
+        if self.vs_mag is not None:
+            summary.setdefault("vs_mag", str(self.vs_mag))
+        if self.median_mag is not None:
+            summary.setdefault("median_single_station_mag", str(self.median_mag))
+
+        vs_details = VSDetails(summary=summary, stations_not_used=list(self.stations_not_used))
 
         return Detection(
             timestamp=timestamp,
@@ -137,7 +247,8 @@ class VSEventState:
             version=str(version),
             core_info=core,
             fault_info=[],
-            gm_info={"pgv_obs": [], "pga_obs": pga_list},
+            gm_info={"pgv_obs": pgv_list, "pga_obs": pga_list, "pgd_obs": pgd_list},
+            vs_details=vs_details,
         )
 
 
@@ -190,6 +301,7 @@ class VSDialect:
         r"creation time:\s*([^;]+);\s*origin time:\s*([^;]+);"
     )
     P_LIK = re.compile(r"likelihood:\s*([-\d.eE+]+)")
+    P_UNUSED = re.compile(r"Stations not used for VS-mag:\s*(?P<list>.+)$")
 
     def __init__(self):
         self.verbose = False
@@ -215,7 +327,7 @@ class VSDialect:
         dets.extend(d_flush)
         ann.extend(a_flush)
 
-        extras: Dict[str, Any] = {
+        extra: Dict[str, Any] = {
             "file": str(path),
             "playback_time": None,
             "started_at": state.file_start_ts_iso,
@@ -225,7 +337,7 @@ class VSDialect:
                 "annotations": len(ann),
             },
         }
-        return dets, ann, extras
+        return dets, ann, extra
 
     # --- streaming helpers ---
 
@@ -253,8 +365,6 @@ class VSDialect:
 
         patterns_cfg = self.profile.get("patterns", {})
         for pid, pat in patterns_cfg.items():
-            if pid == "timestamp_regex":
-                continue
             if re.search(pat, line):
                 ann.append(
                     Annotation(
@@ -312,18 +422,24 @@ class VSDialect:
             sncl = m.group(1)
             wavetype = m.group(2)
             soil = m.group(3)
-            mag = _safe_float(m.group(4))
-            ev.start_station(sncl, wavetype, soil, mag)
+            mag_raw = m.group(4)
+            mag = _safe_float(mag_raw)
+            ev.start_station(sncl, wavetype, soil, mag, mag_raw.strip() if isinstance(mag_raw, str) else None)
 
         if (m := self.P_STATION_LOC.search(message)) and ev.current_station:
             ev.current_station["lat"] = _safe_float(m.group(1))
             ev.current_station["lon"] = _safe_float(m.group(2))
+            ev.current_station["epi_dist_km"] = _safe_float(m.group(3))
 
         if (m := self.P_PGA_Z.search(message)) and ev.current_station:
-            ev.current_station["pga_z"] = _safe_float(m.group(1))
+            ev.current_station["pga_z_val"], ev.current_station["pga_z_sentinel_raw"] = _parse_gm_field(m.group(1))
+            ev.current_station["pgv_z_val"], ev.current_station["pgv_z_sentinel_raw"] = _parse_gm_field(m.group(2))
+            ev.current_station["pgd_z_val"], ev.current_station["pgd_z_sentinel_raw"] = _parse_gm_field(m.group(3))
 
         if (m := self.P_PGA_H.search(message)) and ev.current_station:
-            ev.current_station["pga_h"] = _safe_float(m.group(1))
+            ev.current_station["pga_h_val"], ev.current_station["pga_h_sentinel_raw"] = _parse_gm_field(m.group(1))
+            ev.current_station["pgv_h_val"], ev.current_station["pgv_h_sentinel_raw"] = _parse_gm_field(m.group(2))
+            ev.current_station["pgd_h_val"], ev.current_station["pgd_h_sentinel_raw"] = _parse_gm_field(m.group(3))
 
         if (m := self.P_VS_MAG.search(message)):
             ev.vs_mag = _safe_float(m.group("vs_mag"))
@@ -344,6 +460,11 @@ class VSDialect:
 
         if (m := self.P_LIK.search(message)):
             ev.likelihood = _safe_float(m.group(1))
+
+        if (m := self.P_UNUSED.search(message)) and ev:
+            raw = m.group("list")
+            items = [tok for tok in raw.strip().split() if tok]
+            ev.stations_not_used.extend(items)
 
         return dets, ann
 

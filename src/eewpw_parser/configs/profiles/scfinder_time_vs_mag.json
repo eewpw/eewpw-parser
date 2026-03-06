@@ -1,0 +1,8 @@
+{
+  "algorithm": "finder",
+  "dialect": "scfinder",
+  "patterns": {
+    "1": "length has increased",
+    "2": "length has decreased"
+  }
+}

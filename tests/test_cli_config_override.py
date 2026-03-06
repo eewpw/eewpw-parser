@@ -21,10 +21,6 @@ class TestCLIConfigOverride(unittest.TestCase):
                 json.dumps({"output": {"pretty": True, "indent": 3, "ensure_ascii": False}}),
                 encoding="utf-8",
             )
-            (cfg_root / "vs.json").write_text(
-                json.dumps({"algo": "vs", "dialect": "scvsmag", "merge_multi_files": True}),
-                encoding="utf-8",
-            )
 
             log_path = ROOT / "tests" / "test-data" / "scvsmag-processing-info.log"
             out_path = Path(td) / "out.json"
@@ -32,6 +28,8 @@ class TestCLIConfigOverride(unittest.TestCase):
             cmd = CLI + [
                 "--algo",
                 "vs",
+                "--dialect",
+                "scvsmag",
                 "--output",
                 str(out_path),
                 "--config-root",

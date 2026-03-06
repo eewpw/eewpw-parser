@@ -11,7 +11,7 @@ This repository provides deterministic parsers for EEWPW algorithm logs. Parsers
 ## Parser shape and responsibilities
 
 - Parsers produce a `FinalDoc` with:
-  - `meta`: algo id, dialect, file-level timing, stats, extras.
+  - `meta`: algo id, dialect, file-level timing, stats, extra.
   - `annotations`: collected regex matches for log markers.
   - `detections`: ordered list of `Detection` items with core, fault, and GM info.
 - Each algorithm has dialect-specific logic encapsulated in dedicated classes (e.g., `SCFinderDialect`, `ShakeAlertFinderDialect`). Dialects keep regexes and timestamp rules together.
@@ -22,7 +22,7 @@ This repository provides deterministic parsers for EEWPW algorithm logs. Parsers
 - Lines are ingested in order; parsers maintain per-block state (e.g., “current detection block” for Finder, `VSEventState` for VS) and emit detections as soon as enough fields arrive.
 - Annotation detection runs per line using configured regex profiles; timestamps are derived from log prefixes when available.
 - File-level `started_at` / `finished_at` come from the first/last seen timestamps; in a live tail they can be updated as new lines arrive.
-- Extras for playback or per-file stats are accumulated incrementally so a streaming orchestrator can refresh `meta` without reparsing the full file.
+- Extra payloads for playback or per-file stats are accumulated incrementally so a streaming orchestrator can refresh `meta` without reparsing the full file.
 
 ## Output sinks
 

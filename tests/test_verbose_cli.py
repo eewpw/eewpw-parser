@@ -10,11 +10,14 @@ sys.path.insert(0, str(ROOT / "src"))
 from eewpw_parser.parsers.vs.vs_parser import VSParser
 
 
-SAMPLE_LOG = ROOT.parent / "test-data/parser_train_data/ELM2020/scvsmag-processing-info.log"
+SAMPLE_LOG = ROOT / "example-log-files" / "vs_scvsmag" / "scvsmag_Elm2020" / "scvsmag-processing-info.log"
 
 
 class TestVerboseCLI(unittest.TestCase):
     def _capture_verbose(self, files):
+        if not all(Path(p).exists() for p in files):
+            missing = [str(p) for p in files if not Path(p).exists()]
+            raise unittest.SkipTest(f"missing local log file(s): {', '.join(missing)}")
         buf = io.StringIO()
         sys_stdout = sys.stdout
         sys.stdout = buf

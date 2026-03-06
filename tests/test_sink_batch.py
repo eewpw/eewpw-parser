@@ -66,7 +66,7 @@ class TestFinalDocSink(unittest.TestCase):
         sink.emit_annotation("profile", a1)
         sink.emit_annotation("profile", a2)
 
-        meta = Meta(algo="vs", dialect="scvs", stats_total={}, extras={})
+        meta = Meta(algo="vs", dialect="scvs", stats_total={}, extra={})
         doc = sink.finalize(meta)
 
         self.assertIsNotNone(doc)

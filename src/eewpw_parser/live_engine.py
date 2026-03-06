@@ -6,7 +6,7 @@ from typing import Optional, List
 
 from dateutil import parser as dtp
 
-from .schemas import Detection, Annotation, Meta
+from .schemas import Detection, Annotation, Meta, SCHEMA_VERSION
 from .live_writer import DailyAlgoWriter
 
 # Finder streaming
@@ -14,6 +14,14 @@ from .parsers.finder.finder_parser import FinderParser
 from .parsers.finder.dialects import FinderStreamState
 # VS streaming directly through dialect
 from .parsers.vs.dialects import VSDialect, VSStreamState
+# PLUM streaming through parser + dialect state
+from .parsers.plum.plum_parser import PlumParser
+from .parsers.plum.dialects import PlumStreamState
+# EPIC streaming through parser + dialect state
+from .parsers.epic.epic_parser import EpicParser
+from .parsers.epic.dialects import EpicStreamState
+# GFAST parser (live streaming not supported)
+from .parsers.gfast.gfast_parser import GfastParser
 
 
 class LiveEngine:
@@ -46,6 +54,8 @@ class LiveEngine:
         # parser state
         self._finder_state: Optional[FinderStreamState] = None
         self._vs_state: Optional[VSStreamState] = None
+        self._plum_state: Optional[PlumStreamState] = None
+        self._epic_state: Optional[EpicStreamState] = None
         self._last_event_id: Optional[str] = None
         self._started_dt: Optional[datetime] = None
         self._finished_dt: Optional[datetime] = None
@@ -55,7 +65,7 @@ class LiveEngine:
         self._ann_profile = {
             "finder": "time_vs_magnitude",
             "vs": "time_vs_magnitude",
-        }.get(self.algo, "annotations")
+        }.get(self.algo, "time_vs_magnitude")
 
     def _parse_ts(self, ts_iso: str) -> datetime:
         dt = dtp.parse(ts_iso)
@@ -78,6 +88,8 @@ class LiveEngine:
             self._last_event_id = str(det.event_id)
             self._daily_writer.write_detection(det)
         for ann in anns:
+            if ann.pattern_id is not None and ann.pattern_id != "":
+                ann.pattern_id = f"{self.algo}/{self.dialect}:{ann.pattern_id}"
             self._update_time_bounds(ann.timestamp)
             eid = self._last_event_id or ""
             self._daily_writer.write_annotation(self._ann_profile, ann, eid)
@@ -95,6 +107,18 @@ class LiveEngine:
                 for line in self.source:
                     d, a = self.parser.feed_line(line, self._vs_state)
                     self._emit(d, a)
+            elif isinstance(self.parser, PlumParser):
+                self._plum_state = self._plum_state or PlumStreamState()
+                for line in self.source:
+                    dets, anns, self._plum_state = self.parser.parse_stream([line], state=self._plum_state, finalize=False)
+                    self._emit(dets, anns)
+            elif isinstance(self.parser, EpicParser):
+                self._epic_state = self._epic_state or EpicStreamState()
+                for line in self.source:
+                    dets, anns, self._epic_state = self.parser.parse_stream([line], state=self._epic_state, finalize=False)
+                    self._emit(dets, anns)
+            elif isinstance(self.parser, GfastParser):
+                raise ValueError("gfast live streaming is not supported")
             else:
                 raise ValueError("Unsupported parser type for live engine")
         finally:
@@ -115,15 +139,28 @@ class LiveEngine:
                     self._vs_state = VSStreamState()
                 d, a = self.parser.flush(self._vs_state)
                 self._emit(d, a)
+            elif isinstance(self.parser, PlumParser):
+                if self._plum_state is None:
+                    self._plum_state = PlumStreamState()
+                dets, anns, self._plum_state = self.parser.parse_stream([], state=self._plum_state, finalize=True)
+                self._emit(dets, anns)
+            elif isinstance(self.parser, EpicParser):
+                if self._epic_state is None:
+                    self._epic_state = EpicStreamState()
+                dets, anns, self._epic_state = self.parser.parse_stream([], state=self._epic_state, finalize=True)
+                self._emit(dets, anns)
+            elif isinstance(self.parser, GfastParser):
+                pass
         finally:
             meta = Meta(
                 algo=self.algo,
                 dialect=self.dialect,
+                schema_version=SCHEMA_VERSION,
                 files=None,
                 started_at=self._started_dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ") if self._started_dt else None,
                 finished_at=self._finished_dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ") if self._finished_dt else None,
                 playback_time=None,
-                extras={},
+                extra={},
                 stats_total={},
             )
             self._daily_writer.write_meta(meta)

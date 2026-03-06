@@ -6,6 +6,9 @@ __pycache__/
 # ./tmp directory used for tests
 tmp/
 
+# MacOS specific files
+.DS_Store
+
 # C extensions
 *.so
 

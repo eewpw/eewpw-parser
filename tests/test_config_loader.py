@@ -28,7 +28,9 @@ class TestConfigLoader(unittest.TestCase):
 
         profile = config_loader.open_config_json("profiles/vs_time_vs_mag.json")
         self.assertIn("patterns", profile)
-        self.assertIn("timestamp_regex", profile["patterns"])
+        self.assertIn("start_event", profile["patterns"])
+        self.assertIn("end_event", profile["patterns"])
+        self.assertNotIn("timestamp_regex", profile["patterns"])
 
     def test_env_override_wins(self):
         with tempfile.TemporaryDirectory() as td:
