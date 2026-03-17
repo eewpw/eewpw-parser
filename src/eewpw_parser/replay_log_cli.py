@@ -258,7 +258,7 @@ def playback_file(
 
 def parse_args() -> argparse.Namespace:
     ap = argparse.ArgumentParser(description="EEWPW raw log replay (writes fake logs under ./tmp)")
-    ap.add_argument("--speed", type=float, default=1.0, help="Replay speed factor (<=0 disables sleeping)")
+    ap.add_argument("--speed", type=float, default=1.0, help="Replay speed factor (<=0 clamps to 1.0)")
     ap.add_argument(
         "--time-mode",
         choices=["original", "realtime"],
