@@ -5,7 +5,7 @@ This repository provides deterministic parsers for EEWPW algorithm logs. Parsers
 - `schemas.py` contains the Pydantic models used for detections (`Detection`, `DetectionCore`, `FaultVertex`, `GMObs`), annotations, and the `Meta`/`FinalDoc` envelope.
 - `config.py` loads `global.json` plus reusable profile snippets (`profiles/*.json`) through `config_loader.py`. Runtime config root precedence is: CLI `--config-root` > `EEWPW_PARSER_CONFIG_ROOT` > packaged defaults under `src/eewpw_parser/configs/` (no repo-root fallback). Repo-root `./example-configs` is example-only.
 - `utils.py` provides timestamp normalization helpers (`to_iso_utc_z`, `epoch_to_iso_z`) used by all parsers.
-- `parsers/` holds per-algorithm implementations. Finder and VS are implemented; additional algorithms can plug in using the same patterns.
+- `parsers/` holds per-algorithm implementations. Implemented families are `finder`, `vs`, `plum`, `epic`, `gfast`, and `eqinfo`; additional algorithms can plug in using the same patterns.
 - `cli.py` is the entrypoint (`eewpw-parse`) that wires config, selects a parser, and writes a JSON `FinalDoc`.
 
 ## Parser shape and responsibilities
@@ -51,16 +51,22 @@ This repository provides deterministic parsers for EEWPW algorithm logs. Parsers
   - `payload`: `model_dump()` of the Pydantic model (Detection/Annotation/Meta).
 - Streaming outputs always end with exactly one `meta` record.
 
-## Future: Live Follow Mode
+## Live Follow Mode
 
-- Intended architecture (no implementation yet):
-  - Use `TailLineSource` to read a growing log file with polling.
-  - Feed lines into existing parsers (`FinderParser`, `VSParser`, etc.) with streaming sinks.
-  - Emit to `JsonlStreamSink` (or a future stdout sink) in the same JSONL envelope (`record_type`, `algo`, `dialect`, `instance`, `payload`), with a trailing meta record.
-- Example shape (conceptual):
+- Live follow is implemented via `eewpw-parse-live` using `TailLineSource` + `LiveEngine`.
+- The parser pipeline remains streaming-oriented: lines are tailed, parsed incrementally, and written by `DailyAlgoWriter` as JSONL envelopes with a trailing `meta` record.
+- Live mode currently supports `finder`, `vs`, `plum`, and `epic`; `gfast` and `eqinfo` are rejected at runtime.
+- Example shape:
   ```python
-  source = TailLineSource("/var/log/finder.log", poll_interval=0.5)
-  sink = JsonlStreamSink(Path("/tmp/out.jsonl"), algo="finder", dialect="scfinder", instance="finder@node1")
-  # engine would iterate source and feed lines to the parser, which emits to sink
+  source = TailLineSource("/var/log/finder.log", poll_interval=0.5, seek_end=True, follow=True)
+  parser = FinderParser({"algo": "finder", "dialect": "scfinder"})
+  engine = LiveEngine(
+      source=source,
+      parser=parser,
+      data_root=Path("/tmp/data"),
+      algo="finder",
+      dialect="scfinder",
+      instance="finder@node1",
+  )
+  engine.run_forever()
   ```
-- No CLI flags or behaviour changes are committed yet; this documents the intended path for future live-follow support.

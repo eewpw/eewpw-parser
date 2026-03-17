@@ -168,8 +168,10 @@ eewpw-parse-live \
   --algo finder \
   --dialect scfinder \
   --logfile path/to/live.log \
-  --output-dir tmp/live_output
+  --data-root tmp/live_output
 ```
+
+Live mode currently supports `finder`, `vs`, `plum`, and `epic`. `gfast` and `eqinfo` are accepted by argument choices but rejected at runtime. Use `--data-root` as the preferred output root (`--output-dir` is a deprecated fallback).
 
 ### 4. Dedicated replay entry point
 
