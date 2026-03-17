@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from typing import List, Dict, Any, Tuple, Optional
 from dateutil import parser as dtp
 
+from eewpw_parser.config import load_profile
 from eewpw_parser.schemas import (
     Annotation,
     Detection,
@@ -17,6 +18,11 @@ from eewpw_parser.schemas import (
 
 _NUM_RE = re.compile(r"^-?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?$")
 _XML_DECL_RE = re.compile(r"<\?xml[^>]*\?>", flags=re.IGNORECASE)
+
+# If PLUM ever needs to parse annotation timestamps, the regex below can be used to extract 
+# the timestamp from the event_message line. Correct the REGEX pattern before use. This is
+# only an example.
+# _EVENT_MESSAGE_TS_RE = re.compile(r'<event_message[^>]*\btimestamp="([^"]+)"')
 
 
 def _strip_ns(tag: str) -> str:
@@ -59,9 +65,28 @@ def _parse_grid_data(text: str) -> List[GMGridCell]:
 
 
 class PlumDialect:
+    PROFILE_NAME: str = "profiles/plum_time_vs_mag.json"
+    DIALECT_ID: str = "plum"
+
     def __init__(self):
         self.event_seq = 0
         self.seen_any_block = False
+
+    @property
+    def profile(self) -> dict:
+        if not hasattr(self, "_profile_cache"):
+            self._profile_cache = load_profile(self.PROFILE_NAME)
+        return self._profile_cache
+
+    @staticmethod
+    def _annotation_timestamp_for_line(line: str) -> str:
+        """ PLUM has not been configured to parse annotations. If it needs to in the future, uncomment
+        the lines below and use the correct regex to extract the timestamp from the line. For now, we 
+        return an empty string for all annotation timestamps."""
+        # m = _EVENT_MESSAGE_TS_RE.search(line)
+        # if m:
+        #     return m.group(1)
+        return ""
 
     def _iter_event_blocks(self, lines: List[str]):
         buf: List[str] = []
@@ -95,8 +120,25 @@ class PlumDialect:
             state = PlumStreamState()
         dets: List[Detection] = []
         anns: List[Annotation] = []
+        patterns_cfg = self.profile.get("patterns", {})
+        pattern_items = list(patterns_cfg.items())
 
         for line in lines:
+            state.absolute_line_counter += 1
+
+            ts_iso = self._annotation_timestamp_for_line(line)
+            for idx, (_, pat) in enumerate(pattern_items):
+                if re.search(pat, line):
+                    anns.append(
+                        Annotation(
+                            timestamp=ts_iso,
+                            pattern=pat,
+                            line=str(state.absolute_line_counter),
+                            text=line.rstrip("\n"),
+                            pattern_id=f"plum/{self.DIALECT_ID}:{idx}",
+                        )
+                    )
+
             if not state.in_block:
                 if "<event_message" in line:
                     state.in_block = True
@@ -329,14 +371,10 @@ class PlumDialect:
         )
 
     def parse_file(self, path: str) -> Tuple[List[Detection], List[Annotation], Dict[str, Any]]:
-        detections: List[Detection] = []
-        annotations: List[Annotation] = []
-
         with open(path, "r", encoding="utf-8", errors="ignore") as f:
             lines = f.readlines()
 
-        for block in self._iter_event_blocks(lines):
-            detections.append(self._parse_event_message(block))
+        detections, annotations, _ = self.parse_stream(lines, state=PlumStreamState(), finalize=True)
 
         timestamps = [d.timestamp for d in detections if d.timestamp]
         started_at = None
@@ -364,3 +402,4 @@ class PlumDialect:
 class PlumStreamState:
     in_block: bool = False
     buffer: List[str] = field(default_factory=list)
+    absolute_line_counter: int = 0

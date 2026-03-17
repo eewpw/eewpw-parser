@@ -17,11 +17,6 @@ def get_package_config_path(rel_path: str) -> Path:
     return resources.files("eewpw_parser.configs") / rel_path
 
 
-def _repo_config_root() -> Optional[Path]:
-    repo_root = Path(__file__).resolve().parents[2] / "configs"
-    return repo_root if repo_root.is_dir() else None
-
-
 def _env_config_root() -> Optional[Path]:
     env_root = os.environ.get("EEWPW_PARSER_CONFIG_ROOT")
     if not env_root:
@@ -39,12 +34,6 @@ def get_config_path(rel_path: str) -> Path:
     env_root = _env_config_root()
     if env_root:
         candidate = env_root / rel_path
-        if candidate.exists():
-            return candidate
-
-    repo_root = _repo_config_root()
-    if repo_root:
-        candidate = repo_root / rel_path
         if candidate.exists():
             return candidate
 

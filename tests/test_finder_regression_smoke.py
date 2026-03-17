@@ -54,5 +54,8 @@ def test_finder_regression_smoke(dialect: str, log_path: Path, invariant: str) -
                 for key in ("mag", "epicenter_lat", "epicenter_lon", "depth", "likelihood"):
                     if key in metrics:
                         assert isinstance(metrics[key], str)
+        for annotations in doc.annotations.values():
+            for ann in annotations:
+                assert isinstance(ann.line, str)
     else:
         raise AssertionError(f"unknown invariant: {invariant}")

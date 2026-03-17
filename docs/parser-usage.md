@@ -69,8 +69,14 @@ Core arguments:
 | `inputs` | yes | none | One or more input files |
 | `--mode` | no | `batch` | Output mode (`batch` or `stream-jsonl`) |
 | `--instance` | no | `<algo>@unknown (resolved at runtime)` | Optional instance label |
-| `--config-root` | no | repo default config path | Alternate config root |
+| `--config-root` | no | packaged defaults | Alternate parser config root |
 | `--verbose` | no | `false` | Enable more verbose logging |
+
+Parser runtime config contract:
+- Supported runtime files are `global.json` and `profiles/*.json`.
+- Resolution order is `--config-root` override, then `EEWPW_PARSER_CONFIG_ROOT`, then packaged defaults in `src/eewpw_parser/configs/`.
+- There is no automatic fallback to repo-root `./example-configs` or `./user-config`.
+- Repo-root `./example-configs` is example-only; it is used at runtime only when explicitly selected as a config root.
 
 ## Supported modes
 
@@ -140,13 +146,17 @@ Use the dedicated replay command to replay an existing log as if it were arrivin
 
 ```bash
 eewpw-replay-log \
-  --logfile example-log-files/finder_scfinder/scfinder_Elm2020/scfinder.log \
+  example-log-files/finder_scfinder/scfinder_Elm2020/scfinder.log \
   --speed 1.0
 ```
+
+Replay note: this command replays raw log lines only and does not read parser config/profile files.
 
 ## Notes and maintenance guidance
 
 - Prefer canonical dialect names in documentation and scripts.
 - Treat alias spellings as compatibility inputs, not preferred names.
+- Profile JSONs provide annotation match regex patterns; `patterns.timestamp_regex` is not a runtime key and is stripped by `load_profile()`.
+- PLUM uses the shared profile loader path (`profiles/plum_time_vs_mag.json`) like the other parsers, and PLUM annotation timestamps are intentionally `""`.
 - If a new dialect is added in code, this file should be updated at the same time.
 - If CLI flags or entry points change, update this file together with the README examples.

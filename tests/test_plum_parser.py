@@ -4,10 +4,12 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
+from eewpw_parser.parsers.plum.dialects import PlumDialect
 from eewpw_parser.parsers.plum.plum_parser import PlumParser
 
 
@@ -89,6 +91,24 @@ class TestPlumParser(unittest.TestCase):
                 json.dump(doc.model_dump(), f, indent=2, ensure_ascii=False)
             self.assertTrue(out_path.exists())
             self.assertGreater(out_path.stat().st_size, 0)
+
+    def test_plum_profile_is_loaded_via_shared_config_path(self):
+        xml_line = (
+            '<event_message timestamp="2025-11-13T14:00:00Z" category="live" '
+            'instance="plum@test" orig_sys="plum" version="0"></event_message>\n'
+        )
+        profile_cfg = {"patterns": {"event_message": "event_message"}}
+
+        with mock.patch(
+            "eewpw_parser.parsers.plum.dialects.load_profile", return_value=profile_cfg
+        ) as load_profile_mock:
+            dialect = PlumDialect()
+            dets, anns, _ = dialect.parse_stream([xml_line], finalize=True)
+
+        load_profile_mock.assert_called_once_with("profiles/plum_time_vs_mag.json")
+        self.assertEqual(len(dets), 1)
+        self.assertEqual(len(anns), 1)
+        self.assertEqual(anns[0].timestamp, "")
 
 
 if __name__ == "__main__":

@@ -30,7 +30,10 @@ eewpw-parse --algo vs --dialect scvsmag --mode stream-jsonl --instance vs@node1 
 ```
 
 Notes:
-- Config is merged from `configs/global.json` and `configs/<algo>.json` (e.g., `configs/finder.json`).
+- Runtime parser config contract currently includes only `global.json` and `profiles/*.json`.
+- Resolution order is: CLI `--config-root` override, then `EEWPW_PARSER_CONFIG_ROOT`, then packaged defaults under `src/eewpw_parser/configs/`.
+- There is no automatic fallback to repo-root `./example-configs` or `./user-config`.
+- Repo-root `./example-configs` is documentation/example material only; runtime config loading never reads it unless you pass it explicitly via `--config-root` or `EEWPW_PARSER_CONFIG_ROOT`.
 - Output formatting can be tuned via `output.pretty|indent|ensure_ascii` in config.
 - Detections are sorted by `timestamp`; per-file extra metadata is emitted under `meta.extra["files"]`.
 
@@ -65,6 +68,7 @@ Notes:
 - Sleep = delta_seconds / speed. If speed <= 0, treat as 1; if speed < 0.001, clamp to 0.001.
 - If a line has no timestamp, reuse the previous line’s timestamp; if the first line has no timestamp, write without sleeping.
 - Always writes to `./tmp`; never writes next to the input logs.
+- Replay does not load parser config/profile files and does not accept parser config overrides.
 
 ### Time Mode
 
@@ -99,7 +103,9 @@ Notes:
 
 - Finder: `FinderParser` orchestrates dialects in `parsers/finder/dialects.py` using `parse_stream(lines, state, finalize)`; keeps a `FinderStreamState` for partial blocks and station tables.
 - VS: `VSDialect` processes lines incrementally via `feed_line(...)` + `flush(...)` and tracks a `VSEventState` per event between “Start/End logging for event”.
-- Annotations use regex profiles (e.g., `configs/profiles/vs_time_vs_mag.json`) and are attached under `annotations` as `time_vs_magnitude` (both for Finder and VS).
+- Annotations use regex profiles (e.g., `src/eewpw_parser/configs/profiles/vs_time_vs_mag.json`) and are attached under `annotations` as `time_vs_magnitude` (both for Finder and VS).
+- `patterns.timestamp_regex` is not part of the runtime profile contract; `load_profile()` strips it before parser code consumes profile patterns.
+- PLUM also loads its profile JSON (`profiles/plum_time_vs_mag.json`) via the shared `load_profile()` path, and PLUM annotation timestamps are intentionally emitted as empty strings (`""`).
 
 ## Run Tests
 
@@ -116,7 +122,7 @@ python -m unittest tests/test_vs_parser.py
 ## Key Files
 
 - `src/eewpw_parser/schemas.py`: `FinalDoc`, `Meta`, `Detection`, `DetectionCore`, `GMObs`, `FaultVertex`, `Annotation`.
-- `src/eewpw_parser/config.py`: config merge + `load_profile()` for regex profiles.
+- `src/eewpw_parser/config.py`: `load_global_config()`, `load_profile()`, and live data-root helpers.
 - `src/eewpw_parser/parsers/finder/`: `finder_parser.py` orchestrator, dialects in `dialects.py` (`SCFinderDialect`, `ShakeAlertFinderDialect`, `NativeFinder*`).
 - `src/eewpw_parser/parsers/vs/`: `vs_parser.py` orchestrator, dialect in `dialects.py`.
 - `docs/architecture.md`, `docs/parsers_finder.md`, `docs/parsers_vs.md`.
@@ -124,8 +130,9 @@ python -m unittest tests/test_vs_parser.py
 ## Extending
 
 - Add a new dialect by implementing a class with a streaming API (`parse_stream` or `feed_line` + `flush`) and mapping to `DetectionCore`/GM lists.
-- Register regex patterns in `configs/profiles/<name>.json` and load via `load_profile()`.
+- Register regex patterns in `src/eewpw_parser/configs/profiles/<name>.json` and load via `load_profile()`.
 - Mirror the Finder/VS orchestrators to merge per-file results and derive `meta.started_at/finished_at`.
+- `load_profile()` strips `patterns.timestamp_regex`; profile patterns should only contain runtime-consumed annotation match regexes.
 
 ## Dialects Explained
 
@@ -145,6 +152,6 @@ Implementing a new dialect:
 2. Define any additional regexes or override methods (`_parse_annotations_stream`, `_pick_detection_timestamp`, custom block parsing).
 3. Ensure streaming safety: handle incomplete blocks when `finalize=False` and flush remaining state on `finalize=True` or at `flush()`.
 4. Return detections and annotations shaped for the unified schema; do not reorder or dedup—global dedup occurs after merge.
-5. Add a profile JSON under `configs/profiles/` if new annotation patterns are needed.
+5. Add a profile JSON under `src/eewpw_parser/configs/profiles/` if new annotation patterns are needed.
 
 Result: The orchestrator remains unchanged; selecting the dialect just adjusts extraction specifics while preserving the output contract (`FinalDoc`).

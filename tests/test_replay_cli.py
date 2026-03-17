@@ -24,6 +24,17 @@ class TestReplayCLI(unittest.TestCase):
             self.assertTrue(fake_path.exists())
             self.assertEqual(fake_path.read_text(encoding="utf-8"), log_content)
 
+    def test_replay_rejects_config_root_argument(self):
+        with tempfile.TemporaryDirectory() as td:
+            log_path = Path(td) / "sample.log"
+            log_path.write_text("2020/01/01 00:00:00 first\n", encoding="utf-8")
+
+            cmd = CLI + ["--config-root", td, str(log_path)]
+            result = subprocess.run(cmd, capture_output=True, text=True, env=ENV, cwd=td)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("unrecognized arguments: --config-root", result.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()

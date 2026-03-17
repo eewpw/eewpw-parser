@@ -1199,7 +1199,7 @@ class ShakeAlertFinderDialect(FinderBaseDialect):
                         Annotation(
                             timestamp=ts_iso,
                             pattern=pat,
-                            line=absolute_line,
+                            line=str(absolute_line),
                             text=line.rstrip("\n"),
                             pattern_id=pid,
                         )

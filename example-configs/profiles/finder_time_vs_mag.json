@@ -2,7 +2,6 @@
   "algorithm": "finder",
   "dialect": "scfinder",
   "patterns": {
-    "timestamp_regex": "(\\d{4}/\\d{2}/\\d{2} \\d{2}:\\d{2}:\\d{2})",
     "1": "length has increased",
     "2": "length has decreased"
   }

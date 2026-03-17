@@ -59,7 +59,8 @@ Target log style: SeisComP `scvsmag` processing/info logs (example: `example-log
 - Dialect class: `VSDialect` in `src/eewpw_parser/parsers/vs/dialects.py`.
 - Streaming state: `VSStreamState` keeps file-level timestamps, version counters, and the active `VSEventState`.
 - Event parsing logic:
-  - `feed_line` normalizes the prefix timestamp, records annotations using `configs/profiles/vs_time_vs_mag.json`, and updates file start/end times.
+  - `feed_line` normalizes the prefix timestamp, records annotations using `src/eewpw_parser/configs/profiles/vs_time_vs_mag.json`, and updates file start/end times.
+  - `patterns.timestamp_regex` is not part of VS runtime profile consumption; `load_profile()` strips it before dialect annotation matching.
   - `Start logging for event` flushes any in-flight block and creates a new `VSEventState`; `End logging` finalizes it into a `Detection`.
   - Sensor blocks are accumulated into `VSEventState.stations` with PGA(H)/PGA(Z) where present; `nan` and `-1` sentinels are ignored.
   - VS-mag, creation/origin times, and likelihood are captured from their dedicated lines; timestamps are normalized via `to_iso_utc_z`.
