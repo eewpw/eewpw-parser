@@ -65,7 +65,14 @@ eewpw-replay-log --speed 10.0 /path/to/A.log /path/to/B.log
 
 ## Documentation
 
-- [Parser usage and CLI details](docs/parser-usage.md)
+- Entry points (summary):
+  - `eewpw-parse`: batch/stream parser CLI
+  - `eewpw-parse-live`: live tailing to daily JSONL raw files
+  - `eewpw-replay-log`: raw log replay helper for live-style testing
+
+- [Parser usage overview](docs/parser-usage.md)
+- [Live parsing guide (`eewpw-parse-live`)](docs/live-parsing.md)
+- [Log replay guide (`eewpw-replay-log`)](docs/log-replay.md)
 - [Architecture](docs/architecture.md)
 - [Finder parser notes](docs/parsers_finder.md)
 - [VS parser notes](docs/parsers_vs.md)

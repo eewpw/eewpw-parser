@@ -173,6 +173,8 @@ eewpw-parse-live \
 
 Live mode currently supports `finder`, `vs`, `plum`, and `epic`. `gfast` and `eqinfo` are accepted by argument choices but rejected at runtime. Use `--data-root` as the preferred output root (`--output-dir` is a deprecated fallback).
 
+For full live CLI behavior, flags, output layout, and caveats, see [Live parsing guide](live-parsing.md).
+
 ### 4. Dedicated replay entry point
 
 Use the dedicated replay command to replay an existing log as if it were arriving over time:
@@ -184,6 +186,8 @@ eewpw-replay-log \
 ```
 
 Replay note: this command replays raw log lines only and does not read parser config/profile files.
+
+For full replay CLI behavior, ordering model, timing rules, and caveats, see [Log replay guide](log-replay.md).
 
 ## Notes and maintenance guidance
 
