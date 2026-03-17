@@ -1,6 +1,6 @@
 {
   "algorithm": "finder",
-  "dialect": "scfinder",
+  "dialect": "finder",
   "patterns": {
     "1": "length has increased",
     "2": "length has decreased"

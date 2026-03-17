@@ -78,6 +78,37 @@ Parser runtime config contract:
 - There is no automatic fallback to repo-root `./example-configs` or `./user-config`.
 - Repo-root `./example-configs` is example-only; it is used at runtime only when explicitly selected as a config root.
 
+## Profile JSON files
+
+- Packaged profile JSON files live in `src/eewpw_parser/configs/profiles/`.
+- Example copies are under `example-configs/profiles/`; users can copy/edit profiles and point the parser to them with `--config-root` or `EEWPW_PARSER_CONFIG_ROOT`.
+- Top-level `algorithm` and `dialect` fields are informational metadata only. They are not used by parser runtime logic.
+- Runtime annotation matching behavior is driven by `patterns` entries only (with `patterns.timestamp_regex` stripped by `load_profile()`).
+
+Expected structure:
+
+```json
+{
+  "patterns": {
+    "<pattern_id>": "<string-or-regex searched in log lines>"
+  }
+}
+```
+
+Example:
+
+```json
+{
+  "algorithm": "epic",
+  "dialect": "shakealert",
+  "patterns": {
+    "start_event": "Start logging for event",
+    "end_event": "End logging for event",
+    "likelihood": "likelihood:"
+  }
+}
+```
+
 ## Supported modes
 
 The main CLI currently supports these modes:

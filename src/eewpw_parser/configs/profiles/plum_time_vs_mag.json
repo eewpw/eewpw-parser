@@ -1,6 +1,6 @@
 {
-  "algorithm": "vs",
-  "dialect": "scvsmag",
+  "algorithm": "plum",
+  "dialect": "plum",
   "patterns": {
     "start_event": "Start logging for event",
     "end_event": "End logging for event",
