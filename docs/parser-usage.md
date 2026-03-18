@@ -71,12 +71,45 @@ Core arguments:
 | `--instance` | no | `<algo>@unknown (resolved at runtime)` | Optional instance label |
 | `--config-root` | no | packaged defaults | Alternate parser config root |
 | `--verbose` | no | `false` | Enable more verbose logging |
+| `--show-env` | no | `false` | Print environment/config diagnostics and exit immediately |
 
 Parser runtime config contract:
 - Supported runtime files are `global.json` and `profiles/*.json`.
 - Resolution order is `--config-root` override, then `EEWPW_PARSER_CONFIG_ROOT`, then packaged defaults in `src/eewpw_parser/configs/`.
 - There is no automatic fallback to repo-root `./example-configs` or `./user-config`.
 - Repo-root `./example-configs` is example-only; it is used at runtime only when explicitly selected as a config root.
+- `eewpw-parse --show-env` mirrors this runtime per-file resolution and reports which source is selected for each runtime file.
+
+### Environment diagnostics (`--show-env`)
+
+Use `eewpw-parse --show-env` to print runtime diagnostics without parsing inputs.  
+The report includes:
+- Python interpreter information
+- installed package location
+- config lookup order and configured paths
+- which runtime configuration source is selected per file (with fallback detail when needed)
+
+```bash
+eewpw-parse --show-env
+```
+
+Illustrative output snippet:
+
+```text
+Config lookup order
+  1. --config-root               (not set)
+  2. EEWPW_PARSER_CONFIG_ROOT    (not set)
+  3. packaged defaults
+     path      : /path/to/eewpw_parser/configs
+
+Resolved files
+-------------------------
+global.json
+[X] packaged defaults
+
+profiles/vs_time_vs_mag.json
+[X] --config-root /custom/configs/profiles/vs_time_vs_mag.json
+```
 
 ## Profile JSON files
 

@@ -62,6 +62,7 @@ eewpw-replay-log --speed 10.0 /path/to/A.log /path/to/B.log
 - If unset, `EEWPW_PARSER_CONFIG_ROOT` is used when present.
 - Otherwise packaged defaults under `src/eewpw_parser/configs/` are used.
 - There is no automatic repo-root fallback; `example-configs/` is example material only unless explicitly passed as a config root.
+- Use `eewpw-parse --show-env` to inspect the current runtime environment and see which configuration files are selected by the parser.
 
 ## Documentation
 

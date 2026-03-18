@@ -3,6 +3,7 @@ import argparse
 from pathlib import Path
 from eewpw_parser.config import load_global_config
 from eewpw_parser.config_loader import set_config_root_override
+from eewpw_parser.env_info import build_env_report
 from eewpw_parser.parsers.finder.finder_parser import FinderParser
 from eewpw_parser.parsers.vs.vs_parser import VSParser
 from eewpw_parser.parsers.plum.plum_parser import PlumParser
@@ -12,14 +13,23 @@ from eewpw_parser.parsers.eqinfo.eqinfo_parser import EqinfoParser
 from eewpw_parser.schemas import FinalDoc
 
 def main():
+    pre = argparse.ArgumentParser(add_help=False)
+    pre.add_argument("--show-env", action="store_true")
+    pre_args, _ = pre.parse_known_args()
+
     ap = argparse.ArgumentParser(description="EEWPW deterministic parser")
     ap.add_argument(
+        "--show-env",
+        action="store_true",
+        help="Print environment/config diagnostics and exit.",
+    )
+    ap.add_argument(
         "--algo",
-        required=True,
+        required=not pre_args.show_env,
         choices=["finder", "vs", "plum", "epic", "gfast", "eqinfo"],
         help="Algorithm to parse",
     )
-    ap.add_argument("--dialect", required=True, help="Dialect (e.g., scfinder)")
+    ap.add_argument("--dialect", required=not pre_args.show_env, help="Dialect (e.g., scfinder)")
     ap.add_argument("--config-root", type=Path, default=None, help="Optional override for configs root")
     ap.add_argument("-v", "--verbose", action="store_true", help="Enable verbose console output")
     ap.add_argument(
@@ -33,9 +43,21 @@ def main():
         default=None,
         help="Instance identifier (e.g., finder@host1); defaults to '<algo>@unknown' if not provided.",
     )
-    ap.add_argument("-o", "--output", required=True, help="Output JSON file")
-    ap.add_argument("inputs", nargs="+", help="One or more input log files (top-level only)")
+    ap.add_argument("-o", "--output", required=not pre_args.show_env, help="Output JSON file")
+    ap.add_argument(
+        "inputs",
+        nargs="*" if pre_args.show_env else "+",
+        help="One or more input log files (top-level only)",
+    )
     args = ap.parse_args()
+
+    if args.show_env:
+        if args.config_root is not None and not args.config_root.is_dir():
+            ap.error(f"--config-root must be an existing directory: {args.config_root}")
+        if args.config_root is not None:
+            set_config_root_override(args.config_root)
+        print(build_env_report(), end="")
+        return
 
     if args.config_root is not None:
         set_config_root_override(args.config_root)
