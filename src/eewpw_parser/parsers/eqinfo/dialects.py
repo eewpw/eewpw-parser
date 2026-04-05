@@ -365,8 +365,7 @@ class EqinfoShakeAlertDialect:
                     state.in_block = False
                     continue
 
-                if buffer_ok:
-                    state.buffer.append(normalized)
+                state.buffer.append(normalized)
 
                 if has_end:
                     block = "\n".join(state.buffer)
