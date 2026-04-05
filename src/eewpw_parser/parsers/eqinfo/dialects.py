@@ -339,7 +339,7 @@ class EqinfoShakeAlertDialect:
                     if buffer_ok:
                         state.buffer.append(normalized)
                     if has_end:
-                        block = "\n".join(state.buffer)
+                        block = "".join(state.buffer)
                         state.buffer = []
                         state.in_block = False
                         det = self._finalize_block(block)
@@ -352,7 +352,7 @@ class EqinfoShakeAlertDialect:
                     if buffer_ok:
                         state.buffer.append(normalized)
                     if has_end:
-                        block = "\n".join(state.buffer)
+                        block = "".join(state.buffer)
                         state.buffer = []
                         state.in_block = False
                         det = self._finalize_block(block)
@@ -368,7 +368,7 @@ class EqinfoShakeAlertDialect:
                 state.buffer.append(normalized)
 
                 if has_end:
-                    block = "\n".join(state.buffer)
+                    block = "".join(state.buffer)
                     state.buffer = []
                     state.in_block = False
                     det = self._finalize_block(block)
