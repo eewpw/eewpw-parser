@@ -12,6 +12,7 @@ from eewpw_parser.schemas import (
     FaultVertex,
     GMObs,
     GMInfo,
+    MMIContour,
 )
 from eewpw_parser.config import load_profile
 
@@ -240,27 +241,87 @@ class EqinfoShakeAlertDialect:
         pga_obs: List[GMObs] = []
         pgv_obs: List[GMObs] = []
         pgd_obs: List[GMObs] = []
+        gmcontour_pred: List[MMIContour] = []
+        gm_extra: Dict[str, Any] = {}
 
         if gm_info_elem is not None:
             for child in list(gm_info_elem):
-                if _strip_ns(child.tag) != "gmpoint_obs":
-                    continue
-                for sub in list(child):
-                    sub_tag = _strip_ns(sub.tag)
-                    if sub_tag == "pga_obs":
-                        for obs in list(sub):
-                            if _strip_ns(obs.tag) == "obs":
-                                pga_obs.append(self._parse_obs(obs))
-                    elif sub_tag == "pgv_obs":
-                        for obs in list(sub):
-                            if _strip_ns(obs.tag) == "obs":
-                                pgv_obs.append(self._parse_obs(obs))
-                    elif sub_tag == "pgd_obs":
-                        for obs in list(sub):
-                            if _strip_ns(obs.tag) == "obs":
-                                pgd_obs.append(self._parse_obs(obs))
+                child_tag = _strip_ns(child.tag)
+                if child_tag == "gmpoint_obs":
+                    for sub in list(child):
+                        sub_tag = _strip_ns(sub.tag)
+                        if sub_tag == "pga_obs":
+                            for obs in list(sub):
+                                if _strip_ns(obs.tag) == "obs":
+                                    pga_obs.append(self._parse_obs(obs))
+                        elif sub_tag == "pgv_obs":
+                            for obs in list(sub):
+                                if _strip_ns(obs.tag) == "obs":
+                                    pgv_obs.append(self._parse_obs(obs))
+                        elif sub_tag == "pgd_obs":
+                            for obs in list(sub):
+                                if _strip_ns(obs.tag) == "obs":
+                                    pgd_obs.append(self._parse_obs(obs))
+                elif child_tag == "gmcontour_pred":
+                    contour_attrs: Dict[str, str] = {}
+                    for key in (
+                        "number",
+                        "pause_duration_seconds",
+                        "pause_radius_km",
+                        "pause_restricted",
+                    ):
+                        if key in child.attrib:
+                            contour_attrs[key] = str(child.attrib[key])
+                    if contour_attrs:
+                        gm_extra["gmcontour_pred_attrs"] = contour_attrs
 
-        gm_info = GMInfo(pga_obs=pga_obs, pgv_obs=pgv_obs, pgd_obs=pgd_obs)
+                    contour_extra_rows: List[Dict[str, str]] = []
+                    for contour_elem in list(child):
+                        if _strip_ns(contour_elem.tag) != "contour":
+                            continue
+                        mmi = ""
+                        polygon: Any = []
+                        contour_extra: Dict[str, str] = {}
+                        for contour_child in list(contour_elem):
+                            contour_tag = _strip_ns(contour_child.tag)
+                            contour_text = _text(contour_child)
+                            if contour_tag == "MMI":
+                                mmi = contour_text
+                            elif contour_tag == "polygon":
+                                parsed_polygon: List[Any] = []
+                                for point_token in contour_text.split():
+                                    point_text = point_token.strip()
+                                    if point_text == "":
+                                        continue
+                                    lon_lat = point_text.split(",", 1)
+                                    if len(lon_lat) != 2:
+                                        parsed_polygon.append(point_text)
+                                        continue
+                                    lon_text, lat_text = lon_lat
+                                    if lon_text == "" or lat_text == "":
+                                        parsed_polygon.append(point_text)
+                                    else:
+                                        parsed_polygon.append([lon_text, lat_text])
+                                polygon = parsed_polygon
+                            elif contour_tag == "PGA" and contour_text != "":
+                                contour_extra["PGA"] = contour_text
+                            elif contour_tag == "PGV" and contour_text != "":
+                                contour_extra["PGV"] = contour_text
+
+                        gmcontour_pred.append(MMIContour(MMI=mmi, polygon=polygon))
+                        if contour_extra:
+                            contour_extra_rows.append(contour_extra)
+
+                    if contour_extra_rows:
+                        gm_extra["gmcontour_pred_extra"] = contour_extra_rows
+
+        gm_info = GMInfo(
+            pga_obs=pga_obs,
+            pgv_obs=pgv_obs,
+            pgd_obs=pgd_obs,
+            gmcontour_pred=gmcontour_pred,
+            extra=gm_extra,
+        )
 
         contributors: List[Dict[str, str]] = []
         if contributors_elem is not None:
