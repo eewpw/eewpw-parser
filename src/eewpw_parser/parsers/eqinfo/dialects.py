@@ -12,6 +12,7 @@ from eewpw_parser.schemas import (
     FaultVertex,
     GMObs,
     GMInfo,
+    MMIContour,
 )
 from eewpw_parser.config import load_profile
 
@@ -55,6 +56,8 @@ class EqinfoShakeAlertDialect:
     )
     P_TIME_PREFIX = re.compile(r"^(\d{2}):(\d{2}):(\d{2}):(\d{3,6})\|")
     P_LEVEL = re.compile(r"^\s*([A-Za-z]+)\s*\|\s*(.*)$")
+    P_OPENER_ATTR_CONT = re.compile(r"^[A-Za-z_][A-Za-z0-9_.:-]*\s*=.*$")
+    P_OPENER_ATTR_CONT_QUOTED = re.compile(r"^[\"']\s*[A-Za-z_][A-Za-z0-9_.:-]*\s*=.*$")
 
     @property
     def profile(self) -> dict:
@@ -240,27 +243,87 @@ class EqinfoShakeAlertDialect:
         pga_obs: List[GMObs] = []
         pgv_obs: List[GMObs] = []
         pgd_obs: List[GMObs] = []
+        gmcontour_pred: List[MMIContour] = []
+        gm_extra: Dict[str, Any] = {}
 
         if gm_info_elem is not None:
             for child in list(gm_info_elem):
-                if _strip_ns(child.tag) != "gmpoint_obs":
-                    continue
-                for sub in list(child):
-                    sub_tag = _strip_ns(sub.tag)
-                    if sub_tag == "pga_obs":
-                        for obs in list(sub):
-                            if _strip_ns(obs.tag) == "obs":
-                                pga_obs.append(self._parse_obs(obs))
-                    elif sub_tag == "pgv_obs":
-                        for obs in list(sub):
-                            if _strip_ns(obs.tag) == "obs":
-                                pgv_obs.append(self._parse_obs(obs))
-                    elif sub_tag == "pgd_obs":
-                        for obs in list(sub):
-                            if _strip_ns(obs.tag) == "obs":
-                                pgd_obs.append(self._parse_obs(obs))
+                child_tag = _strip_ns(child.tag)
+                if child_tag == "gmpoint_obs":
+                    for sub in list(child):
+                        sub_tag = _strip_ns(sub.tag)
+                        if sub_tag == "pga_obs":
+                            for obs in list(sub):
+                                if _strip_ns(obs.tag) == "obs":
+                                    pga_obs.append(self._parse_obs(obs))
+                        elif sub_tag == "pgv_obs":
+                            for obs in list(sub):
+                                if _strip_ns(obs.tag) == "obs":
+                                    pgv_obs.append(self._parse_obs(obs))
+                        elif sub_tag == "pgd_obs":
+                            for obs in list(sub):
+                                if _strip_ns(obs.tag) == "obs":
+                                    pgd_obs.append(self._parse_obs(obs))
+                elif child_tag == "gmcontour_pred":
+                    contour_attrs: Dict[str, str] = {}
+                    for key in (
+                        "number",
+                        "pause_duration_seconds",
+                        "pause_radius_km",
+                        "pause_restricted",
+                    ):
+                        if key in child.attrib:
+                            contour_attrs[key] = str(child.attrib[key])
+                    if contour_attrs:
+                        gm_extra["gmcontour_pred_attrs"] = contour_attrs
 
-        gm_info = GMInfo(pga_obs=pga_obs, pgv_obs=pgv_obs, pgd_obs=pgd_obs)
+                    contour_extra_rows: List[Dict[str, str]] = []
+                    for contour_elem in list(child):
+                        if _strip_ns(contour_elem.tag) != "contour":
+                            continue
+                        mmi = ""
+                        polygon: Any = []
+                        contour_extra: Dict[str, str] = {}
+                        for contour_child in list(contour_elem):
+                            contour_tag = _strip_ns(contour_child.tag)
+                            contour_text = _text(contour_child)
+                            if contour_tag == "MMI":
+                                mmi = contour_text
+                            elif contour_tag == "polygon":
+                                parsed_polygon: List[Any] = []
+                                for point_token in contour_text.split():
+                                    point_text = point_token.strip()
+                                    if point_text == "":
+                                        continue
+                                    lon_lat = point_text.split(",", 1)
+                                    if len(lon_lat) != 2:
+                                        parsed_polygon.append(point_text)
+                                        continue
+                                    lon_text, lat_text = lon_lat
+                                    if lon_text == "" or lat_text == "":
+                                        parsed_polygon.append(point_text)
+                                    else:
+                                        parsed_polygon.append([lon_text, lat_text])
+                                polygon = parsed_polygon
+                            elif contour_tag == "PGA" and contour_text != "":
+                                contour_extra["PGA"] = contour_text
+                            elif contour_tag == "PGV" and contour_text != "":
+                                contour_extra["PGV"] = contour_text
+
+                        gmcontour_pred.append(MMIContour(MMI=mmi, polygon=polygon))
+                        if contour_extra:
+                            contour_extra_rows.append(contour_extra)
+
+                    if contour_extra_rows:
+                        gm_extra["gmcontour_pred_extra"] = contour_extra_rows
+
+        gm_info = GMInfo(
+            pga_obs=pga_obs,
+            pgv_obs=pgv_obs,
+            pgd_obs=pgd_obs,
+            gmcontour_pred=gmcontour_pred,
+            extra=gm_extra,
+        )
 
         contributors: List[Dict[str, str]] = []
         if contributors_elem is not None:
@@ -290,6 +353,60 @@ class EqinfoShakeAlertDialect:
         if "<event_message" not in block:
             return None
         return self._parse_event_message(block)
+
+    @staticmethod
+    def _is_start_boundary(normalized: str) -> bool:
+        stripped = normalized.lstrip()
+        return stripped.startswith("<?xml") or stripped.startswith("<event_message")
+
+    @staticmethod
+    def _is_outer_opener_closed(buffer: List[str]) -> bool:
+        joined = "".join(buffer)
+        start_idx = joined.find("<event_message")
+        if start_idx == -1:
+            return False
+
+        in_quote: Optional[str] = None
+        for ch in joined[start_idx + len("<event_message") :]:
+            if in_quote is not None:
+                if ch == in_quote:
+                    in_quote = None
+                continue
+            if ch in ("'", '"'):
+                in_quote = ch
+                continue
+            if ch == ">":
+                return True
+        return False
+
+    @classmethod
+    def _is_safe_outer_opener_continuation(
+        cls, normalized: str, buffer: Optional[List[str]] = None
+    ) -> bool:
+        stripped = normalized.strip()
+        prev_nonblank = ""
+        if buffer:
+            for prev in reversed(buffer):
+                prev_nonblank = prev.strip()
+                if prev_nonblank != "":
+                    break
+        has_event_prefix = bool(buffer) and any("<event_" in prev for prev in buffer)
+
+        if stripped == "":
+            # Blank lines are safe only when an outer opener split is clearly in progress.
+            return prev_nonblank in ("<", "<event_") or has_event_prefix
+        if stripped in ("<", ">", "/>"):
+            return True
+        if stripped.startswith("event_message"):
+            return True
+        if stripped.startswith("message"):
+            # Accept only as a continuation of a previously split "<event_".
+            return prev_nonblank.endswith("<event_")
+        if cls.P_OPENER_ATTR_CONT.match(stripped):
+            return True
+        if cls.P_OPENER_ATTR_CONT_QUOTED.match(stripped):
+            return True
+        return False
 
     def parse_stream(
         self,
@@ -328,53 +445,45 @@ class EqinfoShakeAlertDialect:
                 continue
 
             stripped = normalized.strip()
-            buffer_ok = stripped == "" or normalized.lstrip().startswith("<")
-            has_start = "<?xml" in normalized or "<event_message" in normalized
+            starts_with_lt = normalized.lstrip().startswith("<")
+            has_start = self._is_start_boundary(normalized)
             has_end = "</event_message>" in normalized
 
             if not state.in_block:
                 if has_start:
                     state.in_block = True
-                    state.buffer = []
-                    if buffer_ok:
-                        state.buffer.append(normalized)
-                    if has_end:
-                        block = "\n".join(state.buffer)
-                        state.buffer = []
-                        state.in_block = False
-                        det = self._finalize_block(block)
-                        if det is not None:
-                            detections.append(det)
+                    state.buffer = [normalized]
             else:
                 if has_start:
-                    state.buffer = []
-                    state.in_block = True
-                    if buffer_ok:
-                        state.buffer.append(normalized)
-                    if has_end:
-                        block = "\n".join(state.buffer)
-                        state.buffer = []
-                        state.in_block = False
-                        det = self._finalize_block(block)
-                        if det is not None:
-                            detections.append(det)
-                    continue
+                    # Fresh XML start marker before close is a safe restart boundary.
+                    state.buffer = [normalized]
+                else:
+                    if not self._is_outer_opener_closed(state.buffer):
+                        if self._is_safe_outer_opener_continuation(normalized, state.buffer):
+                            state.buffer.append(normalized)
+                        else:
+                            state.buffer = []
+                            state.in_block = False
+                            continue
+                    else:
+                        if stripped == "<":
+                            state.buffer = []
+                            state.in_block = False
+                            continue
+                        if stripped == "" or starts_with_lt:
+                            state.buffer.append(normalized)
+                        else:
+                            state.buffer = []
+                            state.in_block = False
+                            continue
 
-                if stripped == "<":
-                    state.buffer = []
-                    state.in_block = False
-                    continue
-
-                if buffer_ok:
-                    state.buffer.append(normalized)
-
-                if has_end:
-                    block = "\n".join(state.buffer)
-                    state.buffer = []
-                    state.in_block = False
-                    det = self._finalize_block(block)
-                    if det is not None:
-                        detections.append(det)
+            if state.in_block and has_end:
+                block = "".join(state.buffer)
+                state.buffer = []
+                state.in_block = False
+                det = self._finalize_block(block)
+                if det is not None:
+                    detections.append(det)
 
         if finalize and state.in_block:
             state.buffer = []
