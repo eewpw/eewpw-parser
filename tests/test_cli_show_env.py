@@ -26,7 +26,7 @@ class TestCLIShowEnv(unittest.TestCase):
         self.assertIn("Config lookup order", result.stdout)
         self.assertIn("Resolved files", result.stdout)
         self.assertIn(
-            "global.json\n[ ] --config-root (not set)\n[ ] EEWPW_PARSER_CONFIG_ROOT (not set)\n[X] packaged defaults",
+            "global.json\n[ ] --config-root (not set)\n[ ] EEWPW_PARSER_CONFIG_ROOT (not set)\n[x] packaged defaults",
             result.stdout,
         )
 
@@ -46,10 +46,10 @@ class TestCLIShowEnv(unittest.TestCase):
             self.assertEqual(result.returncode, 0, msg=result.stderr)
 
             global_block = self._section_for(result.stdout, "global.json")
-            self.assertEqual(global_block.strip(), "[X] --config-root")
+            self.assertEqual(global_block.strip(), "[x] --config-root")
 
             vs_block = self._section_for(result.stdout, "profiles/vs_time_vs_mag.json")
-            self.assertEqual(vs_block.strip(), "[X] --config-root")
+            self.assertEqual(vs_block.strip(), "[x] --config-root")
 
             gfast_block = self._section_for(result.stdout, "profiles/gfast_time_vs_mag.json")
             self.assertIn(
@@ -57,7 +57,7 @@ class TestCLIShowEnv(unittest.TestCase):
                 gfast_block,
             )
             self.assertIn("[ ] EEWPW_PARSER_CONFIG_ROOT (not set)", gfast_block)
-            self.assertIn("[X] packaged defaults", gfast_block)
+            self.assertIn("[x] packaged defaults", gfast_block)
             self.assertNotIn("winner:", result.stdout)
 
     def test_show_env_config_lookup_paths_are_absolute(self):
