@@ -115,6 +115,7 @@ profiles/vs_time_vs_mag.json
 
 - Packaged profile JSON files live in `src/eewpw_parser/configs/profiles/`.
 - Example copies are under `example-configs/profiles/`; users can copy/edit profiles and point the parser to them with `--config-root` or `EEWPW_PARSER_CONFIG_ROOT`.
+- Finder profile filenames are dialect-specific at runtime: `scfinder` uses `profiles/scfinder_time_vs_mag.json`, while `native_finder`, `native_finder_legacy`, and `shakealert` use `profiles/finder_time_vs_mag.json`.
 - Top-level `algorithm` and `dialect` fields are informational metadata only. They are not used by parser runtime logic.
 - Runtime annotation matching behavior is driven by `patterns` entries only (with `patterns.timestamp_regex` stripped by `load_profile()`).
 

@@ -42,7 +42,7 @@ Parsing rules:
 
 ## Annotations
 
-- A profile JSON (`src/eewpw_parser/configs/profiles/finder_time_vs_mag.json` for scfinder) defines regex patterns for notable lines. `_parse_annotations` walks the log, normalizes timestamps from the prefix, and records matches.
+- A profile JSON defines regex patterns for notable lines. `SCFinderDialect` uses `src/eewpw_parser/configs/profiles/scfinder_time_vs_mag.json`; `NativeFinderDialect`, `NativeFinderLegacyDialect`, and `ShakeAlertFinderDialect` use `src/eewpw_parser/configs/profiles/finder_time_vs_mag.json`. `_parse_annotations` walks the log, normalizes timestamps from the prefix, and records matches.
 - `patterns.timestamp_regex` is not used by Finder runtime annotation parsing; `load_profile()` strips it if present.
 - File-level timing comes from the first/last timestamped lines; playback time is captured when the START_PLAYBACK pattern is present.
 

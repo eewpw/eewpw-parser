@@ -1,0 +1,8 @@
+{
+  "algorithm": "finder",
+  "dialect": "scfinder",
+  "patterns": {
+    "1": "SOLUTION RUPTURE",
+    "2": "length has decreased"
+  }
+}
