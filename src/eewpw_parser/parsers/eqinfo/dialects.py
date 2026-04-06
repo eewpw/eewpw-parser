@@ -56,6 +56,8 @@ class EqinfoShakeAlertDialect:
     )
     P_TIME_PREFIX = re.compile(r"^(\d{2}):(\d{2}):(\d{2}):(\d{3,6})\|")
     P_LEVEL = re.compile(r"^\s*([A-Za-z]+)\s*\|\s*(.*)$")
+    P_OPENER_ATTR_CONT = re.compile(r"^[A-Za-z_][A-Za-z0-9_.:-]*\s*=.*$")
+    P_OPENER_ATTR_CONT_QUOTED = re.compile(r"^[\"']\s*[A-Za-z_][A-Za-z0-9_.:-]*\s*=.*$")
 
     @property
     def profile(self) -> dict:
@@ -352,6 +354,60 @@ class EqinfoShakeAlertDialect:
             return None
         return self._parse_event_message(block)
 
+    @staticmethod
+    def _is_start_boundary(normalized: str) -> bool:
+        stripped = normalized.lstrip()
+        return stripped.startswith("<?xml") or stripped.startswith("<event_message")
+
+    @staticmethod
+    def _is_outer_opener_closed(buffer: List[str]) -> bool:
+        joined = "".join(buffer)
+        start_idx = joined.find("<event_message")
+        if start_idx == -1:
+            return False
+
+        in_quote: Optional[str] = None
+        for ch in joined[start_idx + len("<event_message") :]:
+            if in_quote is not None:
+                if ch == in_quote:
+                    in_quote = None
+                continue
+            if ch in ("'", '"'):
+                in_quote = ch
+                continue
+            if ch == ">":
+                return True
+        return False
+
+    @classmethod
+    def _is_safe_outer_opener_continuation(
+        cls, normalized: str, buffer: Optional[List[str]] = None
+    ) -> bool:
+        stripped = normalized.strip()
+        prev_nonblank = ""
+        if buffer:
+            for prev in reversed(buffer):
+                prev_nonblank = prev.strip()
+                if prev_nonblank != "":
+                    break
+        has_event_prefix = bool(buffer) and any("<event_" in prev for prev in buffer)
+
+        if stripped == "":
+            # Blank lines are safe only when an outer opener split is clearly in progress.
+            return prev_nonblank in ("<", "<event_") or has_event_prefix
+        if stripped in ("<", ">", "/>"):
+            return True
+        if stripped.startswith("event_message"):
+            return True
+        if stripped.startswith("message"):
+            # Accept only as a continuation of a previously split "<event_".
+            return prev_nonblank.endswith("<event_")
+        if cls.P_OPENER_ATTR_CONT.match(stripped):
+            return True
+        if cls.P_OPENER_ATTR_CONT_QUOTED.match(stripped):
+            return True
+        return False
+
     def parse_stream(
         self,
         lines: List[str],
@@ -389,52 +445,45 @@ class EqinfoShakeAlertDialect:
                 continue
 
             stripped = normalized.strip()
-            buffer_ok = stripped == "" or normalized.lstrip().startswith("<")
-            has_start = "<?xml" in normalized or "<event_message" in normalized
+            starts_with_lt = normalized.lstrip().startswith("<")
+            has_start = self._is_start_boundary(normalized)
             has_end = "</event_message>" in normalized
 
             if not state.in_block:
                 if has_start:
                     state.in_block = True
-                    state.buffer = []
-                    if buffer_ok:
-                        state.buffer.append(normalized)
-                    if has_end:
-                        block = "".join(state.buffer)
-                        state.buffer = []
-                        state.in_block = False
-                        det = self._finalize_block(block)
-                        if det is not None:
-                            detections.append(det)
+                    state.buffer = [normalized]
             else:
                 if has_start:
-                    state.buffer = []
-                    state.in_block = True
-                    if buffer_ok:
-                        state.buffer.append(normalized)
-                    if has_end:
-                        block = "".join(state.buffer)
-                        state.buffer = []
-                        state.in_block = False
-                        det = self._finalize_block(block)
-                        if det is not None:
-                            detections.append(det)
-                    continue
+                    # Fresh XML start marker before close is a safe restart boundary.
+                    state.buffer = [normalized]
+                else:
+                    if not self._is_outer_opener_closed(state.buffer):
+                        if self._is_safe_outer_opener_continuation(normalized, state.buffer):
+                            state.buffer.append(normalized)
+                        else:
+                            state.buffer = []
+                            state.in_block = False
+                            continue
+                    else:
+                        if stripped == "<":
+                            state.buffer = []
+                            state.in_block = False
+                            continue
+                        if stripped == "" or starts_with_lt:
+                            state.buffer.append(normalized)
+                        else:
+                            state.buffer = []
+                            state.in_block = False
+                            continue
 
-                if stripped == "<":
-                    state.buffer = []
-                    state.in_block = False
-                    continue
-
-                state.buffer.append(normalized)
-
-                if has_end:
-                    block = "".join(state.buffer)
-                    state.buffer = []
-                    state.in_block = False
-                    det = self._finalize_block(block)
-                    if det is not None:
-                        detections.append(det)
+            if state.in_block and has_end:
+                block = "".join(state.buffer)
+                state.buffer = []
+                state.in_block = False
+                det = self._finalize_block(block)
+                if det is not None:
+                    detections.append(det)
 
         if finalize and state.in_block:
             state.buffer = []
