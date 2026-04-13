@@ -50,16 +50,9 @@ def _normalize_annotation_lookup_key(algo: str, dialect: Optional[str]) -> Optio
             return None
         return f"finder/{canonical}"
 
-    if algo_norm == "vs":
-        return "vs/scvsmag"
-
-    if algo_norm == "plum":
-        return "plum/plum"
-
-    if algo_norm in {"epic", "gfast", "eqinfo"}:
-        return f"{algo_norm}/shakealert"
-
-    return None
+    if not algo_norm or not dialect_norm:
+        return None
+    return f"{algo_norm}/{dialect_norm}"
 
 
 def resolve_annotation_profile(

@@ -93,7 +93,7 @@ class TestAnnotationsConfigResolution(unittest.TestCase):
                 )
                 self.assertEqual(profile.get("patterns"), {"1": "FINDER_ALIAS_MARKER"})
 
-    def test_vs_and_plum_dialects_normalize_for_annotation_lookup(self):
+    def test_non_finder_dialects_normalize_generically_for_annotation_lookup(self):
         with tempfile.TemporaryDirectory() as td:
             cfg_root = Path(td)
             _write_json(
@@ -101,8 +101,9 @@ class TestAnnotationsConfigResolution(unittest.TestCase):
                 {
                     "annotations": {
                         "time_vs_magnitude": {
-                            "vs/scvsmag": {"start_event": "VS_MARKER"},
-                            "plum/plum": {"start_event": "PLUM_MARKER"},
+                            "vs/custom_vs_runtime_dialect": {"start_event": "VS_MARKER"},
+                            "plum/custom_plum_runtime_dialect": {"start_event": "PLUM_MARKER"},
+                            "epic/custom_epic_runtime_dialect": {"start_event": "EPIC_MARKER"},
                         }
                     }
                 },
@@ -122,9 +123,47 @@ class TestAnnotationsConfigResolution(unittest.TestCase):
                 dialect="custom_plum_runtime_dialect",
                 target="time_vs_magnitude",
             )
+            epic_profile = parser_config.load_profile(
+                "profiles/epic_time_vs_mag.json",
+                algo="epic",
+                dialect="custom_epic_runtime_dialect",
+                target="time_vs_magnitude",
+            )
 
             self.assertEqual(vs_profile.get("patterns"), {"start_event": "VS_MARKER"})
             self.assertEqual(plum_profile.get("patterns"), {"start_event": "PLUM_MARKER"})
+            self.assertEqual(epic_profile.get("patterns"), {"start_event": "EPIC_MARKER"})
+
+    def test_non_finder_falls_back_to_legacy_profile_when_generic_key_missing(self):
+        with tempfile.TemporaryDirectory() as td:
+            cfg_root = Path(td)
+            _write_json(
+                cfg_root / "annotations.json",
+                {
+                    "annotations": {
+                        "time_vs_magnitude": {
+                            "vs/other_runtime_dialect": {"start_event": "UNUSED"},
+                        }
+                    }
+                },
+            )
+            _write_json(
+                cfg_root / "profiles" / "vs_time_vs_mag.json",
+                {"patterns": {"start_event": "VS_LEGACY_FALLBACK_MARKER"}},
+            )
+            config_loader.set_config_root_override(cfg_root)
+            parser_config.load_profile.cache_clear()
+
+            profile = parser_config.load_profile(
+                "profiles/vs_time_vs_mag.json",
+                algo="vs",
+                dialect="custom_vs_runtime_dialect",
+                target="time_vs_magnitude",
+            )
+            self.assertEqual(
+                profile.get("patterns"),
+                {"start_event": "VS_LEGACY_FALLBACK_MARKER"},
+            )
 
     def test_falls_back_to_legacy_profiles_when_annotations_json_missing(self):
         with tempfile.TemporaryDirectory() as td:
