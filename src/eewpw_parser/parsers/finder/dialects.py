@@ -135,6 +135,8 @@ class FinderBaseDialect:
 
     # The dialect parser profile JSON
     PROFILE_NAME: str = "profiles/finder_time_vs_mag.json"
+    PROFILE_LOOKUP_ALGO: str = "finder"
+    PROFILE_LOOKUP_DIALECT: Optional[str] = "native_finder"
     verbose: bool = False
 
     @property
@@ -143,7 +145,12 @@ class FinderBaseDialect:
         Cached accessor for the annotation/profile config.
         """
         if not hasattr(self, "_profile_cache"):
-            self._profile_cache = load_profile(self.PROFILE_NAME)
+            self._profile_cache = load_profile(
+                self.PROFILE_NAME,
+                algo=self.PROFILE_LOOKUP_ALGO,
+                dialect=self.PROFILE_LOOKUP_DIALECT,
+                target="time_vs_magnitude",
+            )
         return self._profile_cache
 
     def _normalize_message(self, line: str) -> str:
@@ -1143,6 +1150,7 @@ class SCFinderDialect(FinderBaseDialect):
         r"^(\d{4}[/\-]\d{2}[/\-]\d{2}\s+\d{2}:\d{2}:\d{2})\s+\[notice/Application\]\s+Starting scfinder"
     )
     PROFILE_NAME: str = "profiles/scfinder_time_vs_mag.json"
+    PROFILE_LOOKUP_DIALECT: Optional[str] = "scfinder"
 
 
 class ShakeAlertFinderDialect(FinderBaseDialect):
@@ -1162,6 +1170,7 @@ class ShakeAlertFinderDialect(FinderBaseDialect):
         r"^(\d{4}[/\-]\d{2}[/\-]\d{2}\s+\d{2}:\d{2}:\d{2})\s+\[notice/Application\]\s+Starting scfinder"
     )
     PROFILE_NAME: str = "profiles/finder_time_vs_mag.json"
+    PROFILE_LOOKUP_DIALECT: Optional[str] = "shakealert"
 
     # Inline absolute timestamps such as:
     #   2025-11-07 00:00:00:081
@@ -1385,7 +1394,8 @@ class NativeFinderDialect(FinderBaseDialect):
     # No START_PLAYBACK_RE, or a different one, e.g. line that marks "Finder started"
     START_PLAYBACK_RE = None
 
-    PROFILE_NAME: str = "profiles/finder_time_vs_mag.json"  
+    PROFILE_NAME: str = "profiles/finder_time_vs_mag.json"
+    PROFILE_LOOKUP_DIALECT: Optional[str] = "native_finder"
 
     def _parse_detections_stream(
         self,
@@ -1869,6 +1879,7 @@ class NativeFinderLegacyDialect(FinderBaseDialect):
     #      "process: timestamp in process function = 1723616759"
     P_TS_EPOCH = re.compile(r"\bTimestamp\s*=\s*(\d+)")
     P_TS_PROCESS = re.compile(r"timestamp in process function\s*=\s*(\d+)")
+    PROFILE_LOOKUP_DIALECT: Optional[str] = "native_finder_legacy"
 
     def _should_continue_after_station_header(self) -> bool:
         return True

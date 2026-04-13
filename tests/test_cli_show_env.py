@@ -29,6 +29,7 @@ class TestCLIShowEnv(unittest.TestCase):
             "global.json\n[ ] --config-root (not set)\n[ ] EEWPW_PARSER_CONFIG_ROOT (not set)\n[x] packaged defaults",
             result.stdout,
         )
+        self.assertIn("annotations.json", result.stdout)
 
     def test_show_env_uses_compact_vs_expanded_file_format(self):
         with tempfile.TemporaryDirectory() as td:
@@ -47,6 +48,13 @@ class TestCLIShowEnv(unittest.TestCase):
 
             global_block = self._section_for(result.stdout, "global.json")
             self.assertEqual(global_block.strip(), "[x] --config-root")
+
+            annotations_block = self._section_for(result.stdout, "annotations.json")
+            self.assertIn(
+                f"[ ] --config-root {cfg_root / 'annotations.json'} (missing)",
+                annotations_block,
+            )
+            self.assertIn("[x] packaged defaults", annotations_block)
 
             vs_block = self._section_for(result.stdout, "profiles/vs_time_vs_mag.json")
             self.assertEqual(vs_block.strip(), "[x] --config-root")

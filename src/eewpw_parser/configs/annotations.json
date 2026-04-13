@@ -1,0 +1,50 @@
+{
+  "annotations": {
+    "time_vs_magnitude": {
+      "finder/scfinder": {
+        "1": "length has increased",
+        "2": "length has decreased"
+      },
+      "finder/native_finder": {
+        "1": "increased",
+        "2": "decreased",
+        "3": "SOLUTION TEMPLATE"
+      },
+      "finder/native_finder_legacy": {
+        "1": "increased",
+        "2": "decreased",
+        "3": "SOLUTION TEMPLATE"
+      },
+      "finder/shakealert": {
+        "1": "increased",
+        "2": "decreased",
+        "3": "SOLUTION TEMPLATE"
+      },
+      "vs/scvsmag": {
+        "start_event": "Start logging for event",
+        "end_event": "End logging for event",
+        "likelihood": "likelihood:"
+      },
+      "plum/plum": {
+        "start_event": "Start logging for event",
+        "end_event": "End logging for event",
+        "likelihood": "likelihood:"
+      },
+      "epic/shakealert": {
+        "start_event": "Start logging for event",
+        "end_event": "End logging for event",
+        "likelihood": "likelihood:"
+      },
+      "gfast/shakealert": {
+        "start_event": "Start logging for event",
+        "end_event": "End logging for event",
+        "likelihood": "likelihood:"
+      },
+      "eqinfo/shakealert": {
+        "start_event": "Start logging for event",
+        "end_event": "End logging for event",
+        "likelihood": "likelihood:"
+      }
+    }
+  }
+}

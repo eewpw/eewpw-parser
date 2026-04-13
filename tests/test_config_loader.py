@@ -26,6 +26,10 @@ class TestConfigLoader(unittest.TestCase):
         self.assertIn("output", global_cfg)
         self.assertEqual(global_cfg["output"]["indent"], 2)
 
+        annotations_cfg = config_loader.open_config_json("annotations.json")
+        self.assertIn("annotations", annotations_cfg)
+        self.assertIn("time_vs_magnitude", annotations_cfg["annotations"])
+
         profile = config_loader.open_config_json("profiles/vs_time_vs_mag.json")
         self.assertIn("patterns", profile)
         self.assertIn("start_event", profile["patterns"])

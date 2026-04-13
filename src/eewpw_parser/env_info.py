@@ -110,7 +110,7 @@ def build_env_report() -> str:
     _append_path_details(lines, pkg_root)
     lines.append("")
 
-    runtime_files = ["global.json", *_packaged_profile_paths()]
+    runtime_files = ["global.json", "annotations.json", *_packaged_profile_paths()]
 
     lines.append("Resolved files")
     lines.append("-" * 28)
