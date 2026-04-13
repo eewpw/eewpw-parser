@@ -1,4 +1,5 @@
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -15,7 +16,9 @@ CLI = [sys.executable, str(ROOT / "src" / "eewpw_parser" / "cli.py")]
 class TestCLIShowEnv(unittest.TestCase):
     @staticmethod
     def _section_for(output: str, heading: str) -> str:
-        after = output.split(f"{heading}\n", 1)[1]
+        match = re.search(rf"(?m)^{re.escape(heading)}\n", output)
+        assert match is not None, f"heading not found: {heading}"
+        after = output[match.end() :]
         return after.split("\n\n", 1)[0]
 
     def test_show_env_runs_without_parse_inputs_or_required_flags(self):
@@ -23,8 +26,24 @@ class TestCLIShowEnv(unittest.TestCase):
         self.assertEqual(result.returncode, 0, msg=result.stderr)
         self.assertIn("Python", result.stdout)
         self.assertIn("Package", result.stdout)
+        self.assertIn("Supported algorithms and dialects", result.stdout)
+        # Current product contract: live-mode section is intentionally not emitted.
+        self.assertNotIn("Live-mode support", result.stdout)
+        self.assertIn("annotations.json active keys", result.stdout)
+        self.assertIn("Annotation resolution report", result.stdout)
+        self.assertIn("Deprecated legacy profile usage", result.stdout)
+        self.assertIn("accepted inputs (alias -> canonical):", result.stdout)
+        self.assertRegex(
+            result.stdout,
+            r"(?m)^\s*finder\s*\.*\s*->\s*native_finder\s*$",
+        )
+        self.assertNotIn("source   :", result.stdout)
+        self.assertNotIn("workers  :", result.stdout)
+        self.assertNotIn("SCFinderDialect", result.stdout)
+        self.assertNotIn("FinderParser", result.stdout)
         self.assertIn("Config lookup order", result.stdout)
         self.assertIn("Resolved files", result.stdout)
+        self.assertIn("Profiles summary", result.stdout)
         self.assertIn(
             "global.json\n[ ] --config-root (not set)\n[ ] EEWPW_PARSER_CONFIG_ROOT (not set)\n[x] packaged defaults",
             result.stdout,
@@ -66,7 +85,6 @@ class TestCLIShowEnv(unittest.TestCase):
             )
             self.assertIn("[ ] EEWPW_PARSER_CONFIG_ROOT (not set)", gfast_block)
             self.assertIn("[x] packaged defaults", gfast_block)
-            self.assertNotIn("winner:", result.stdout)
 
     def test_show_env_config_lookup_paths_are_absolute(self):
         with tempfile.TemporaryDirectory() as td:
