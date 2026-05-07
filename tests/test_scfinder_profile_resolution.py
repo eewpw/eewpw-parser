@@ -46,6 +46,10 @@ class TestSCFinderProfileResolution(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             cfg_root = Path(td)
             _write_json(
+                cfg_root / "annotations.json",
+                {"annotations": {"time_vs_magnitude": {}}},
+            )
+            _write_json(
                 cfg_root / "profiles" / "scfinder_time_vs_mag.json",
                 {
                     "algorithm": "finder",
@@ -85,6 +89,10 @@ class TestSCFinderProfileResolution(unittest.TestCase):
     def test_scfinder_ignores_finder_profile_override_only(self):
         with tempfile.TemporaryDirectory() as td:
             cfg_root = Path(td)
+            _write_json(
+                cfg_root / "annotations.json",
+                {"annotations": {"time_vs_magnitude": {}}},
+            )
             _write_json(
                 cfg_root / "profiles" / "finder_time_vs_mag.json",
                 {
