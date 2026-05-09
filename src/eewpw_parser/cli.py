@@ -1,5 +1,6 @@
 import json
 import argparse
+import sys
 from pathlib import Path
 from eewpw_parser.config import load_global_config
 from eewpw_parser.config_loader import set_config_root_override
@@ -103,6 +104,11 @@ def main():
     elif args.mode == "stream-jsonl":
         from eewpw_parser.sinks import JsonlStreamSink
 
+        print(
+            "Warning: eewpw-parse --mode stream-jsonl is deprecated and will be removed in a future release. "
+            "Use eewpw-parse-live for live daily JSONL output, or omit --mode for canonical offline JSON.",
+            file=sys.stderr,
+        )
         out_path = Path(args.output)
         sink = JsonlStreamSink(out_path, algo=args.algo, dialect=cfg.get("dialect"), instance=instance)
         parser.parse(args.inputs, sink=sink)

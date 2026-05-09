@@ -36,6 +36,10 @@ class TestCLIStream(unittest.TestCase):
             self.assertGreaterEqual(len(lines), 2)
             parsed = [json.loads(l) for l in lines]
             self.assertEqual(parsed[-1]["record_type"], "meta")
+            stderr = result.stderr.lower()
+            self.assertIn("--mode stream-jsonl", stderr)
+            self.assertIn("deprecated", stderr)
+            self.assertIn("eewpw-parse-live", stderr)
 
 
 if __name__ == "__main__":

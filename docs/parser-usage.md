@@ -5,7 +5,7 @@ This document summarizes the parsers, dialects, aliases, and command-line usage 
 It is intended as a practical reference for:
 - choosing the correct `--algo` and `--dialect`
 - understanding which dialect names are canonical versus aliases
-- running the parser in batch or JSONL streaming mode
+- running offline parsing with `eewpw-parse`
 - using the dedicated live and replay entry points
 
 ## Overview
@@ -52,7 +52,6 @@ Alternatively, the CLI can be invoked directly through Python (useful during dev
 python -m src.eewpw_parser.cli \
   --algo finder \
   --dialect scfinder \
-  --mode batch \
   --output tmp/offline_output/finder_scfinder.json \
   example-log-files/finder_scfinder/scfinder_Elm2020/scfinder.log
 ```
@@ -67,18 +66,21 @@ Core arguments:
 | `--dialect` | yes | none | Selects the dialect or accepted alias |
 | `--output` | yes | none | Output path |
 | `inputs` | yes | none | One or more input files |
-| `--mode` | no | `batch` | Output mode (`batch` or `stream-jsonl`) |
+| `--mode` | no | `batch` | Output mode (`batch` or deprecated `stream-jsonl`) |
 | `--instance` | no | `<algo>@unknown (resolved at runtime)` | Optional instance label |
 | `--config-root` | no | packaged defaults | Alternate parser config root |
 | `--verbose` | no | `false` | Enable more verbose logging |
 | `--show-env` | no | `false` | Print environment/config diagnostics and exit immediately |
 
 Parser runtime config contract:
-- Supported runtime files are `global.json` and `profiles/*.json`.
+- Supported runtime files are `global.json`, `annotations.json`, and `profiles/*.json`.
 - Resolution order is `--config-root` override, then `EEWPW_PARSER_CONFIG_ROOT`, then packaged defaults in `src/eewpw_parser/configs/`.
 - There is no automatic fallback to repo-root `./example-configs` or `./user-config`.
 - Repo-root `./example-configs` is example-only; it is used at runtime only when explicitly selected as a config root.
 - `eewpw-parse --show-env` mirrors this runtime per-file resolution and reports which source is selected for each runtime file.
+- Annotation customization should go in `annotations.json` under your chosen config root.
+- For the same `<algo>/<dialect>` key, `annotations.json` takes precedence over legacy profile files (no merge).
+- `profiles/*.json` remains supported as fallback for compatibility, but is deprecated and planned for removal.
 
 ### Environment diagnostics (`--show-env`)
 
@@ -111,25 +113,67 @@ profiles/vs_time_vs_mag.json
 [X] --config-root /custom/configs/profiles/vs_time_vs_mag.json
 ```
 
-## Profile JSON files
+## Custom annotation patterns
 
-- Packaged profile JSON files live in `src/eewpw_parser/configs/profiles/`.
-- Example copies are under `example-configs/profiles/`; users can copy/edit profiles and point the parser to them with `--config-root` or `EEWPW_PARSER_CONFIG_ROOT`.
-- Finder profile filenames are dialect-specific at runtime: `scfinder` uses `profiles/scfinder_time_vs_mag.json`, while `native_finder`, `native_finder_legacy`, and `shakealert` use `profiles/finder_time_vs_mag.json`.
-- Top-level `algorithm` and `dialect` fields are informational metadata only. They are not used by parser runtime logic.
-- Runtime annotation matching behavior is driven by `patterns` entries only (with `patterns.timestamp_regex` stripped by `load_profile()`).
+The recommended way to customize annotation matching is to use your own
+`annotations.json` file together with `--config-root`.
 
-Expected structure:
+Typical workflow:
+
+1. Create a custom config folder
+2. Add an `annotations.json` file
+3. Pass the folder with `--config-root`
+
+Example:
+
+```bash
+eewpw-parse \
+  --algo finder \
+  --dialect scfinder \
+  --config-root /path/to/my-configs \
+  --output out.json \
+  input.log
+```
+
+Example directory layout:
+
+```text
+my-configs/
+├── annotations.json
+└── global.json
+```
+
+Preferred `annotations.json` structure:
 
 ```json
 {
-  "patterns": {
-    "<pattern_id>": "<string-or-regex searched in log lines>"
+  "annotations": {
+    "time_vs_magnitude": {
+      "finder/scfinder": {
+        "new_event": "Starting event",
+        "solution_update": "Updating solution"
+      }
+    }
   }
 }
 ```
 
-Example:
+For the same `<algo>/<dialect>` key, entries from `annotations.json`
+take precedence over legacy profile files.
+
+## Legacy profile JSON files (deprecated)
+
+Older profile files under `profiles/*.json` are still supported as
+fallback for compatibility, but this mechanism is deprecated and planned
+for removal in a future release.
+
+Packaged profile files live in:
+
+```text
+src/eewpw_parser/configs/profiles/
+```
+
+Legacy profile format:
 
 ```json
 {
@@ -143,6 +187,15 @@ Example:
 }
 ```
 
+Notes:
+- Top-level `algorithm` and `dialect` fields are informational only.
+- Runtime matching uses the `patterns` entries.
+- `patterns.timestamp_regex` is ignored by parser runtime logic.
+- Finder profile filenames are dialect-specific at runtime:
+  - `scfinder` → `profiles/scfinder_time_vs_mag.json`
+  - `native_finder`, `native_finder_legacy`, and `shakealert`
+    → `profiles/finder_time_vs_mag.json`
+
 ## Supported modes
 
 The main CLI currently supports these modes:
@@ -150,9 +203,9 @@ The main CLI currently supports these modes:
 | Mode | Output form | Intended use |
 |---|---|---|
 | `batch` | One final JSON document | Normal offline parsing |
-| `stream-jsonl` | JSONL event stream | Streaming / live-style pipelines |
+| `stream-jsonl` | JSONL event stream | Legacy offline export (deprecated) |
 
-Important: `offline`, `live`, and `replay` are not `--mode` values of the main CLI. Live and replay are handled through dedicated entry points.
+Important: `offline`, `live`, and `replay` are not `--mode` values of the main CLI. Live and replay are handled through dedicated entry points, and live workflows should use `eewpw-parse-live` (not `eewpw-parse --mode stream-jsonl`).
 
 ## Command examples
 
@@ -164,7 +217,6 @@ Parse one or more files and emit a single final JSON document:
 eewpw-parse \
   --algo finder \
   --dialect scfinder \
-  --mode batch \
   --output tmp/offline_output/finder_scfinder.json \
   example-log-files/finder_scfinder/scfinder_Elm2020/scfinder.log
 ```
@@ -175,23 +227,24 @@ Another example using VS:
 eewpw-parse \
   --algo vs \
   --dialect scvsmag \
-  --mode batch \
   --output tmp/offline_output/vs_scvsmag.json \
   path/to/vs.log
 ```
 
-### 2. JSONL streaming mode from the main CLI
+### 2. Legacy JSONL streaming mode from the main CLI
 
-Emit JSONL records instead of a single final JSON document:
+Emit JSONL records instead of a single final JSON document (deprecated):
 
 ```bash
 eewpw-parse \
   --algo finder \
   --dialect scfinder \
   --mode stream-jsonl \
-  --output tmp/live_output/finder_scfinder.jsonl \
+  --output tmp/offline_output/finder_scfinder.jsonl \
   example-log-files/finder_scfinder/scfinder_Elm2020/scfinder.log
 ```
+
+Use this only for backward compatibility. For live tailing and daily JSONL files, use `eewpw-parse-live`.
 
 ### 3. Dedicated live entry point
 
@@ -227,6 +280,8 @@ For full replay CLI behavior, ordering model, timing rules, and caveats, see [Lo
 
 - Prefer canonical dialect names in documentation and scripts.
 - Treat alias spellings as compatibility inputs, not preferred names.
+- For annotation customization, prefer `annotations.json` in a user config root passed with `--config-root`.
+- Treat `profiles/*.json` as fallback compatibility config; this path is deprecated and planned for removal.
 - Profile JSONs provide annotation match regex patterns; `patterns.timestamp_regex` is not a runtime key and is stripped by `load_profile()`.
 - PLUM uses the shared profile loader path (`profiles/plum_time_vs_mag.json`) like the other parsers, and PLUM annotation timestamps are intentionally `""`.
 - If a new dialect is added in code, this file should be updated at the same time.

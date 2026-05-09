@@ -1,6 +1,6 @@
 # eewpw-parser
 
-Deterministic, streaming-friendly parsers for EEW (Earthquake Early Warning) algorithm logs. The parser CLI can emit a unified JSON `FinalDoc` (`batch`) or JSONL envelopes (`stream-jsonl`), with dedicated live tailing and replay entry points.
+Deterministic parsers for EEW (Earthquake Early Warning) algorithm logs. `eewpw-parse` is the offline parser and writes canonical JSON by default. `eewpw-parse-live` is the dedicated live tail command and writes daily JSONL files.
 
 ## Supported algorithms
 
@@ -32,13 +32,13 @@ Requires Python 3.9+. Runtime deps include `pydantic>=2,<3` and `python-dateutil
 
 ## Quick start
 
-Batch JSON output:
+Batch JSON output (default mode):
 
 ```bash
-eewpw-parse --algo finder --dialect scfinder --mode batch -o out.json /path/to/log1 /path/to/log2
+eewpw-parse --algo finder --dialect scfinder -o out.json /path/to/log1 /path/to/log2
 ```
 
-JSONL streaming output:
+Legacy offline JSONL output (deprecated):
 
 ```bash
 eewpw-parse --algo vs --dialect scvsmag --mode stream-jsonl --instance vs@node1 -o out.jsonl /path/to/scvsmag-processing-info.log
@@ -62,12 +62,14 @@ eewpw-replay-log --speed 10.0 /path/to/A.log /path/to/B.log
 - If unset, `EEWPW_PARSER_CONFIG_ROOT` is used when present.
 - Otherwise packaged defaults under `src/eewpw_parser/configs/` are used.
 - There is no automatic repo-root fallback; `example-configs/` is example material only unless explicitly passed as a config root.
+- Put custom annotation patterns in `annotations.json` under your config root and pass that root with `--config-root`.
+- `profiles/*.json` is still supported as fallback for compatibility, but is deprecated and planned for removal.
 - Use `eewpw-parse --show-env` to inspect the current runtime environment and see which configuration files are selected by the parser.
 
 ## Documentation
 
 - Entry points (summary):
-  - `eewpw-parse`: batch/stream parser CLI
+  - `eewpw-parse`: offline parser CLI (default canonical JSON; `--mode stream-jsonl` is deprecated)
   - `eewpw-parse-live`: live tailing to daily JSONL raw files
   - `eewpw-replay-log`: raw log replay helper for live-style testing
 

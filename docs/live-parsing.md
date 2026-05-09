@@ -1,7 +1,7 @@
 # Live Parsing (`eewpw-parse-live`)
 
 `eewpw-parse-live` tails one logfile and emits live raw JSONL records under a data root.  
-It is a dedicated live-tail command, not the same as batch parsing (`eewpw-parse --mode batch`).
+It is a dedicated live-tail command, not the same as offline parsing with `eewpw-parse`.
 
 ## Command synopsis
 
@@ -17,7 +17,7 @@ eewpw-parse-live --algo <algo> --dialect <dialect> --logfile <path> [options]
 | `--instance` | no | resolved at runtime to `<algo>@unknown` | Instance label written into output envelopes. |
 | `--output-dir` | no | none | Deprecated fallback output root (treated as `data_root` if `--data-root` is not set). |
 | `--data-root` | no | resolved by precedence | Preferred output root for live raw files; overrides `--output-dir` if both are provided. |
-| `--config-root` | no | none | Optional config root override for loading `global.json` and profiles. |
+| `--config-root` | no | none | Optional config root override for loading `global.json`, `annotations.json`, and legacy fallback profiles. |
 | `--verbose` | no | `false` | Enables verbose runtime output. |
 | `--poll-interval` | no | `0.1` | Tail polling interval in seconds. |
 
@@ -51,6 +51,7 @@ The CLI accepts additional algorithm names (`gfast`, `eqinfo`), but these are no
 ## Output layout and record format
 
 Live output is JSONL-only (not batch JSON).
+`eewpw-parse-live` does not use or accept `--mode`.
 
 Path layout:
 
@@ -75,6 +76,11 @@ Config root precedence:
 1. `--config-root` (if set)
 2. `EEWPW_PARSER_CONFIG_ROOT` (if valid directory)
 3. packaged defaults under `src/eewpw_parser/configs/`
+
+Annotation customization:
+- Put custom patterns in `annotations.json` in your config root.
+- Pass that folder with `--config-root` (or set `EEWPW_PARSER_CONFIG_ROOT`).
+- `profiles/*.json` is fallback compatibility config and is deprecated/planned for removal.
 
 ## Limitations
 
