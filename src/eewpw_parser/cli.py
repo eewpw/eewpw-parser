@@ -14,6 +14,9 @@ from eewpw_parser.parsers.eqinfo.eqinfo_parser import EqinfoParser
 from eewpw_parser.schemas import FinalDoc
 
 def main():
+    # Pre-parse only `--show-env` so we can relax normally-required
+    # parser arguments (`--algo`, `--dialect`, inputs, output, etc.)
+    # before constructing the main argparse parser.
     pre = argparse.ArgumentParser(add_help=False)
     pre.add_argument("--show-env", action="store_true")
     pre_args, _ = pre.parse_known_args()

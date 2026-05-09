@@ -368,18 +368,174 @@ def _resolve_annotation_source_for_key(
     }
 
 
+
 def _render_path(path: Optional[Path]) -> str:
     if path is None:
         return "none"
     return str(path.expanduser().resolve(strict=False))
 
 
+# --- Formatting helpers ---
+def _append_report_section(lines: List[str], title: str, width: int = 72) -> None:
+    lines.append("")
+    lines.append("=" * width)
+    lines.append(title)
+    lines.append("-" * width)
+
+
+# --- Status summary/reporting helpers ---
+def _check_json_file(path: Optional[Path], required_top_keys: Optional[List[str]] = None) -> Dict[str, Any]:
+    if path is None:
+        return {"status": "missing", "message": "missing"}
+
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return {"status": "missing", "message": "missing"}
+    except json.JSONDecodeError as exc:
+        return {"status": "malformed", "message": f"malformed JSON: {exc.msg}"}
+    except OSError as exc:
+        return {"status": "unreadable", "message": f"unreadable: {exc}"}
+
+    if required_top_keys:
+        missing_keys = [key for key in required_top_keys if key not in raw]
+        if missing_keys:
+            return {
+                "status": "invalid_structure",
+                "message": f"valid JSON, but missing required key(s): {', '.join(missing_keys)}",
+            }
+
+    return {"status": "valid", "message": "found, valid"}
+
+
+def _annotation_integrity_summary(annotations_state: Dict[str, Any]) -> Dict[str, Any]:
+    winner = annotations_state.get("winner")
+    check = _check_json_file(Path(winner) if winner is not None else None, required_top_keys=["annotations"])
+
+    if check["status"] == "valid" and not isinstance(annotations_state.get("target_cfg"), dict):
+        check = {
+            "status": "invalid_structure",
+            "message": f"valid JSON, but target '{_ANNOTATION_TARGET}' is unavailable",
+        }
+
+    return check
+
+
+def _legacy_profile_integrity_summary(profile_paths: List[str]) -> Dict[str, Any]:
+    summary = {
+        "available": 0,
+        "valid": 0,
+        "malformed": 0,
+        "invalid_structure": 0,
+        "missing": 0,
+        "unreadable": 0,
+        "details": [],
+    }
+
+    for rel_path in profile_paths:
+        winner, _ = config_loader.get_config_path_resolution(rel_path)
+        check = _check_json_file(Path(winner) if winner is not None else None)
+        status = check["status"]
+        summary[status] = int(summary.get(status, 0)) + 1
+        if winner is not None:
+            summary["available"] += 1
+        summary["details"].append({"rel_path": rel_path, "winner": winner, **check})
+
+    return summary
+
+
+def _build_status_summary(
+    annotations_state: Dict[str, Any],
+    used_legacy_profiles: List[str],
+    shipped_profiles: List[str],
+) -> List[str]:
+    lines: List[str] = []
+    warnings: List[str] = []
+
+    cli_root = config_loader.CONFIG_ROOT_OVERRIDE
+    env_root_raw = config_loader.get_env_config_root_raw()
+
+    if cli_root is not None:
+        config_source = "--config-root"
+        custom_root = str(cli_root.expanduser().resolve(strict=False))
+    elif env_root_raw is not None:
+        config_source = "EEWPW_PARSER_CONFIG_ROOT"
+        custom_root = str(env_root_raw.expanduser().resolve(strict=False))
+    else:
+        config_source = "packaged defaults"
+        custom_root = "not set"
+
+    annotation_check = _annotation_integrity_summary(annotations_state)
+    legacy_check = _legacy_profile_integrity_summary(shipped_profiles)
+
+    if shipped_profiles:
+        if used_legacy_profiles:
+            legacy_state = f"available, used fallback for {len(used_legacy_profiles)} profile(s)"
+        else:
+            legacy_state = "available, not used"
+    else:
+        legacy_state = "not available"
+
+    if annotation_check["status"] not in {"valid", "missing"}:
+        warnings.append(f"annotations.json: {annotation_check['message']}")
+    if annotation_check["status"] == "missing":
+        warnings.append("annotations.json is missing; parser may rely on legacy fallback profiles where available")
+
+    for item in legacy_check["details"]:
+        if item["status"] in {"malformed", "invalid_structure", "unreadable"}:
+            warnings.append(f"{item['rel_path']}: {item['message']}")
+
+    if used_legacy_profiles:
+        warnings.append(
+            "one or more annotation lookups are using deprecated legacy profile fallback files"
+        )
+
+    header_rows = [
+        "EEWPW Parser configuration status",
+        "",
+        f"Config source      : {config_source}",
+        f"Custom config root : {custom_root}",
+        f"annotations.json   : {annotation_check['message']}",
+        f"Legacy profiles    : {legacy_state}",
+        f"Problems detected  : {'yes' if warnings else 'none'}",
+    ]
+
+    if config_source == "packaged defaults":
+        header_rows.extend(
+            [
+                "",
+                "To use custom annotations, pass:",
+                "  --config-root /path/to/config-folder",
+            ]
+        )
+
+    box_width = max(len(row) for row in header_rows)
+    border = "+" + "=" * (box_width + 2) + "+"
+    empty_row = "| " + " " * box_width + " |"
+
+    lines.append(border)
+    for row in header_rows:
+        if row:
+            lines.append("| " + row.ljust(box_width) + " |")
+        else:
+            lines.append(empty_row)
+    lines.append(border)
+    lines.append("")
+
+    if warnings:
+        lines.append("Warnings")
+        lines.append("-" * 32)
+        for warning in warnings:
+            lines.append(f"  - {warning}")
+        lines.append("")
+
+    return lines
+
+
 def build_env_report() -> str:
     lines: List[str] = []
 
-    lines.append("EEWPW Parser Environment")
-    lines.append("=" * 32)
-    lines.append("")
+    _append_report_section(lines, "EEWPW Parser environment")
 
     lines.append("Python")
     lines.append(f"  Executable : {sys.executable}")
@@ -398,11 +554,10 @@ def build_env_report() -> str:
     annotations_state = _load_annotations_target_state()
     live_most_complete_algos = _discover_live_most_complete_algorithms()
 
-    lines.append("Supported algorithms and dialects")
-    lines.append("-" * 32)
+    _append_report_section(lines, "Supported algorithms and dialects")
     for algo in sorted(capabilities):
         info = capabilities[algo]
-        lines.append(algo)
+        lines.append(f"* {algo}")
         alias_map = info.get("alias_map") or {}
         canonical = info.get("canonical") or []
 
@@ -452,8 +607,7 @@ def build_env_report() -> str:
 
     # Uncomment the live-mode support section when we have more to say about it.
     # For now, we keep it commented out to have a cleaner report.
-    # lines.append("Live-mode support")
-    # lines.append("-" * 32)
+    # _append_report_section(lines, "Live-mode support")
     # if live_most_complete_keys:
     #     lines.append(f"  most-complete combos: {', '.join(live_most_complete_keys)}")
     # else:
@@ -464,8 +618,7 @@ def build_env_report() -> str:
     #     lines.append("  offline-only by design: (none)")
     # lines.append("")
 
-    lines.append("annotations.json active keys")
-    lines.append("-" * 32)
+    _append_report_section(lines, "annotations.json active keys")
     lines.append(f"  winner: {_render_path(annotations_state.get('winner'))}")
     target_cfg = annotations_state.get("target_cfg")
     if isinstance(target_cfg, dict):
@@ -477,8 +630,7 @@ def build_env_report() -> str:
         lines.append(f"  target '{_ANNOTATION_TARGET}': unavailable ({annotations_state.get('reason')})")
     lines.append("")
 
-    lines.append("Annotation resolution report")
-    lines.append("-" * 32)
+    _append_report_section(lines, "Annotation resolution report")
     resolution_rows: List[Dict[str, Any]] = []
     for lookup_key in canonical_keys:
         row = _resolve_annotation_source_for_key(
@@ -507,9 +659,17 @@ def build_env_report() -> str:
         rel_path for rel_path in shipped_profiles if rel_path not in set(used_legacy_profiles)
     )
 
+    status_lines = _build_status_summary(
+        annotations_state=annotations_state,
+        used_legacy_profiles=used_legacy_profiles,
+        shipped_profiles=shipped_profiles,
+    )
+    detail_header: List[str] = []
+    _append_report_section(detail_header, "Detailed diagnostics")
+    lines = status_lines + detail_header + lines
+
     # These are the old profile JSON files that we still support.
-    lines.append("Deprecated legacy profile usage")
-    lines.append("-" * 32)
+    _append_report_section(lines, "Deprecated legacy profile usage")
     if used_legacy_profiles:
         for rel_path in used_legacy_profiles:
             winner, _ = config_loader.get_config_path_resolution(rel_path)
@@ -530,7 +690,7 @@ def build_env_report() -> str:
 
     # Check the folders in look-up order. If not set, indicate so...
     # Otherwise, show the path.
-    lines.append("Config lookup order")
+    _append_report_section(lines, "Config lookup order")
     lines.append("  1. --config-root")
     if cli_root is None:
         lines.append("     (not set)")
@@ -549,24 +709,23 @@ def build_env_report() -> str:
 
     runtime_files = ["global.json", "annotations.json", *_packaged_profile_paths()]
 
-    lines.append("Resolved files")
-    lines.append("-" * 28)
+    _append_report_section(lines, "Resolved files")
     for rel_path in runtime_files:
         _, trace = config_loader.get_config_path_resolution(rel_path)
-        lines.append(f"{rel_path}")
+        lines.append(f"  {rel_path}")
 
         if _is_compact_case(trace):
             # Mark the winning source with [x] and skip details for compact cases.
-            lines.append(f"[x] {_winner_source(trace)}")
+            lines.append(f"    [x] {_winner_source(trace)}")
         else:
             for step in trace:
-                lines.append(_format_detailed_step(step))
+                lines.append(f"    {_format_detailed_step(step)}")
             if not any(step.get("status") == "winner" for step in trace):
-                lines.append("[ ] no source selected (not found)")
+                lines.append("    [ ] no source selected (not found)")
         lines.append("")
 
     profiles = [p for p in runtime_files if p.startswith("profiles/")]
-    lines.append("Profiles summary")
+    _append_report_section(lines, "Profiles summary")
     lines.append(f"  profiles considered ({len(profiles)}):")
     for rel_path in profiles:
         lines.append(f"  - {rel_path}")
