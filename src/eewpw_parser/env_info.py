@@ -377,10 +377,12 @@ def _render_path(path: Optional[Path]) -> str:
 
 # --- Formatting helpers ---
 def _append_report_section(lines: List[str], title: str, width: int = 72) -> None:
+    title = f" {title} "
+    box_width = max(len(title), min(width, len(title)))
     lines.append("")
-    lines.append("=" * width)
-    lines.append(title)
-    lines.append("-" * width)
+    lines.append("┌" + "─" * box_width + "┐")
+    lines.append("│" + title.ljust(box_width) + "│")
+    lines.append("└" + "─" * box_width + "┘")
 
 
 # --- Status summary/reporting helpers ---
@@ -665,7 +667,7 @@ def build_env_report() -> str:
         shipped_profiles=shipped_profiles,
     )
     detail_header: List[str] = []
-    _append_report_section(detail_header, "Detailed diagnostics")
+    # _append_report_section(detail_header, "Detailed diagnostics")
     lines = status_lines + detail_header + lines
 
     # These are the old profile JSON files that we still support.
