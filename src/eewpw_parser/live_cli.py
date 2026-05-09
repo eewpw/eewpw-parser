@@ -33,6 +33,8 @@ def main():
     ap.add_argument("--poll-interval", type=float, default=0.1, help="Polling interval for tailing in seconds")
     args = ap.parse_args()
 
+    if args.config_root is not None and not args.config_root.is_dir():
+        ap.error(f"--config-root must be an existing directory: {args.config_root}")
     if args.config_root is not None:
         set_config_root_override(args.config_root)
 

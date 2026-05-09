@@ -206,6 +206,32 @@ class TestSources(unittest.TestCase):
             lines = list(TailLineSource(str(p), seek_end=True, poll_interval=0.01, follow=False))
             self.assertEqual(lines, [])
 
+    def test_tail_line_source_follow_true_buffers_partial_until_newline(self):
+        with tempfile.TemporaryDirectory() as td:
+            p = Path(td) / "tail.log"
+            p.write_text("", encoding="utf-8")
+
+            lines_out = []
+            errors = []
+            source = TailLineSource(str(p), seek_end=False, poll_interval=0.01, max_lines=1, follow=True)
+            t = self._start_collecting(source, lines_out, errors)
+
+            with p.open("a", encoding="utf-8") as fh:
+                fh.write("part")
+                fh.flush()
+
+            time.sleep(0.05)
+            self.assertEqual(lines_out, [])
+
+            with p.open("a", encoding="utf-8") as fh:
+                fh.write("ial\n")
+                fh.flush()
+
+            t.join(timeout=2.0)
+            self.assertFalse(t.is_alive(), "tail reader did not finish")
+            self.assertEqual(errors, [])
+            self.assertEqual(lines_out, ["partial\n"])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, List
@@ -57,6 +58,7 @@ class LiveEngine:
         self._plum_state: Optional[PlumStreamState] = None
         self._epic_state: Optional[EpicStreamState] = None
         self._last_event_id: Optional[str] = None
+        self._last_event_ts_iso: Optional[str] = None
         self._started_dt: Optional[datetime] = None
         self._finished_dt: Optional[datetime] = None
         self._closed = False
@@ -67,6 +69,13 @@ class LiveEngine:
             "vs": "time_vs_magnitude",
         }.get(self.algo, "time_vs_magnitude")
 
+    def _normalize_annotation_pattern_id(self, pattern_id: Optional[str]) -> Optional[str]:
+        if pattern_id is None or pattern_id == "":
+            return pattern_id
+        if re.match(r"^[^/:]+/[^:]+:.+$", pattern_id):
+            return pattern_id
+        return f"{self.algo}/{self.dialect}:{pattern_id}"
+
     def _parse_ts(self, ts_iso: str) -> datetime:
         dt = dtp.parse(ts_iso)
         if dt.tzinfo is None:
@@ -74,6 +83,23 @@ class LiveEngine:
         else:
             dt = dt.astimezone(timezone.utc)
         return dt
+
+    def _safe_annotation_ts(self, ann: Annotation) -> Optional[str]:
+        raw_ts = (ann.timestamp or "").strip()
+        if raw_ts:
+            try:
+                self._parse_ts(raw_ts)
+                return raw_ts
+            except Exception:
+                pass
+
+        # If a parsed detection timestamp was already observed, reuse it as the
+        # closest reliable context for timestamp-less live annotations.
+        if self._finished_dt is not None:
+            return self._last_event_ts_iso or self._finished_dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+        if self._last_event_ts_iso is not None:
+            return self._last_event_ts_iso
+        return None
 
     def _update_time_bounds(self, ts_iso: str) -> None:
         dt = self._parse_ts(ts_iso)
@@ -86,11 +112,15 @@ class LiveEngine:
         for det in dets:
             self._update_time_bounds(det.timestamp)
             self._last_event_id = str(det.event_id)
+            self._last_event_ts_iso = det.timestamp
             self._daily_writer.write_detection(det)
         for ann in anns:
-            if ann.pattern_id is not None and ann.pattern_id != "":
-                ann.pattern_id = f"{self.algo}/{self.dialect}:{ann.pattern_id}"
-            self._update_time_bounds(ann.timestamp)
+            ann.pattern_id = self._normalize_annotation_pattern_id(ann.pattern_id)
+            ann_ts = self._safe_annotation_ts(ann)
+            if ann_ts is None:
+                continue
+            ann.timestamp = ann_ts
+            self._update_time_bounds(ann_ts)
             eid = self._last_event_id or ""
             self._daily_writer.write_annotation(self._ann_profile, ann, eid)
 

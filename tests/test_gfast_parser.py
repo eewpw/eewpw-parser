@@ -2,6 +2,8 @@ import json
 import os
 import sys
 import unittest
+import io
+import contextlib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -250,6 +252,13 @@ class TestGfastParser(unittest.TestCase):
 
         if _use_synthetic_log():
             self.assertGreater(len(detections_with_fault_info), 0)
+
+    def test_parse_is_quiet_when_not_verbose(self):
+        parser = GfastParser({"dialect": "shakealert", "verbose": False})
+        stdout_buffer = io.StringIO()
+        with contextlib.redirect_stdout(stdout_buffer):
+            parser.parse([str(GFAST_LOG)])
+        self.assertEqual(stdout_buffer.getvalue(), "")
 
     def test_xml_block_extraction_count(self):
         parser = GfastParser({"dialect": "shakealert"})

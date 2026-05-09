@@ -60,6 +60,8 @@ def main():
         print(build_env_report(), end="")
         return
 
+    if args.config_root is not None and not args.config_root.is_dir():
+        ap.error(f"--config-root must be an existing directory: {args.config_root}")
     if args.config_root is not None:
         set_config_root_override(args.config_root)
 

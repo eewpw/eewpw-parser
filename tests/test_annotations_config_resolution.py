@@ -287,6 +287,47 @@ class TestAnnotationsConfigResolution(unittest.TestCase):
             self.assertEqual(doc.meta.dialect, "native-finder")
             self.assertIn("finder/native-finder:1", {a.pattern_id for a in doc.annotations["time_vs_magnitude"]})
 
+    def test_malformed_explicit_annotations_json_does_not_fallback(self):
+        with tempfile.TemporaryDirectory() as td:
+            cfg_root = Path(td)
+            (cfg_root / "annotations.json").write_text("{invalid json", encoding="utf-8")
+            _write_json(
+                cfg_root / "profiles" / "scfinder_time_vs_mag.json",
+                {"patterns": {"22": "LEGACY_TARGET_FALLBACK_MARKER"}},
+            )
+
+            config_loader.set_config_root_override(cfg_root)
+            parser_config.load_profile.cache_clear()
+
+            with self.assertRaises(json.JSONDecodeError):
+                parser_config.load_profile(
+                    "profiles/scfinder_time_vs_mag.json",
+                    algo="finder",
+                    dialect="scfinder",
+                    target="time_vs_magnitude",
+                )
+
+    def test_malformed_explicit_profile_json_does_not_fallback(self):
+        with tempfile.TemporaryDirectory() as td:
+            cfg_root = Path(td)
+            _write_json(
+                cfg_root / "annotations.json",
+                {"annotations": {"other_target": {"finder/scfinder": {"1": "UNUSED"}}}},
+            )
+            (cfg_root / "profiles" / "scfinder_time_vs_mag.json").parent.mkdir(parents=True, exist_ok=True)
+            (cfg_root / "profiles" / "scfinder_time_vs_mag.json").write_text("{broken", encoding="utf-8")
+
+            config_loader.set_config_root_override(cfg_root)
+            parser_config.load_profile.cache_clear()
+
+            with self.assertRaises(json.JSONDecodeError):
+                parser_config.load_profile(
+                    "profiles/scfinder_time_vs_mag.json",
+                    algo="finder",
+                    dialect="scfinder",
+                    target="time_vs_magnitude",
+                )
+
 
 if __name__ == "__main__":
     unittest.main()

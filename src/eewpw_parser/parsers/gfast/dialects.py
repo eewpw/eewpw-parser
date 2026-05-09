@@ -200,13 +200,6 @@ class GfastShakeAlertDialect:
         try:
             root = ET.fromstring(sanitized)
         except ET.ParseError as err:
-            offending_line = ""
-            if err.position:
-                line_idx = err.position[0] - 1
-                lines = sanitized.splitlines()
-                if 0 <= line_idx < len(lines):
-                    offending_line = lines[line_idx]
-            print(f"GFAST XML parse error line {err.position[0]}: {repr(offending_line)}")
             raise
 
         attrs = dict(root.attrib)
@@ -322,8 +315,6 @@ class GfastShakeAlertDialect:
         gm_info = GMInfo(pga_obs=pga_obs, pgv_obs=pgv_obs, extra=gm_extra)
 
         fault_vertices: List[FaultVertex] = []
-        print(fault_info_elem)
-        print("====================")
         if fault_info_elem is not None:
             for elem in fault_info_elem.iter():
                 if _strip_ns(elem.tag) != "vertex":

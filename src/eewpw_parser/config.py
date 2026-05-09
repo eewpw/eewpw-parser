@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-import json
 import os
 from typing import Dict, Any, Optional
 from functools import lru_cache
@@ -66,7 +65,7 @@ def resolve_annotation_profile(
 
     try:
         cfg = open_config_json("annotations.json")
-    except (FileNotFoundError, json.JSONDecodeError):
+    except FileNotFoundError:
         return None
 
     annotations = cfg.get("annotations")
@@ -120,7 +119,7 @@ def load_profile(
 
     try:
         profile = open_config_json(rel_path)
-    except (FileNotFoundError, json.JSONDecodeError):
+    except FileNotFoundError:
         return {}
 
     patterns = profile.get("patterns")

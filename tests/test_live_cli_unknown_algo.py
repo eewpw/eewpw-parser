@@ -18,3 +18,23 @@ def test_live_cli_rejects_unknown_algo():
         result = subprocess.run(cmd, capture_output=True, text=True, env=ENV, cwd=td)
         assert result.returncode != 0
         assert "invalid choice" in (result.stderr or result.stdout)
+
+
+def test_live_cli_rejects_invalid_config_root():
+    with tempfile.TemporaryDirectory() as td:
+        dummy_log = Path(td) / "dummy.log"
+        dummy_log.write_text("line\n", encoding="utf-8")
+        invalid_root = Path(td) / "missing-config-root"
+        cmd = CLI + [
+            "--algo",
+            "vs",
+            "--dialect",
+            "scvsmag",
+            "--logfile",
+            str(dummy_log),
+            "--config-root",
+            str(invalid_root),
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True, env=ENV, cwd=td)
+        assert result.returncode != 0
+        assert "--config-root must be an existing directory" in (result.stderr or result.stdout)

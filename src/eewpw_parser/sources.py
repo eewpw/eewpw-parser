@@ -64,6 +64,7 @@ class TailLineSource(LineSource):
         file_sig = None
         missing_logged = False
         lines_yielded = 0
+        partial_line = ""
         seek_end_on_open = bool(self.seek_end)
 
         try:
@@ -90,6 +91,13 @@ class TailLineSource(LineSource):
             while True:
                 line = f.readline()
                 if line:
+                    if self.follow:
+                        if partial_line:
+                            line = partial_line + line
+                            partial_line = ""
+                        if not line.endswith("\n"):
+                            partial_line = line
+                            continue
                     yield line
                     lines_yielded += 1
 
@@ -98,6 +106,9 @@ class TailLineSource(LineSource):
                     continue
 
                 if not self.follow:
+                    if partial_line:
+                        yield partial_line
+                        lines_yielded += 1
                     break
 
                 try:
@@ -129,6 +140,7 @@ class TailLineSource(LineSource):
                         continue
 
                     if new_sig == path_sig:
+                        partial_line = ""
                         f.close()
                         f = new_f
                         file_sig = new_sig
@@ -141,6 +153,7 @@ class TailLineSource(LineSource):
 
                 cur_pos = f.tell()
                 if pst.st_size < cur_pos:
+                    partial_line = ""
                     f.seek(0, os.SEEK_SET)
                     logger.info("tail source detected truncate-in-place, rewound: %s", self.path)
                     continue

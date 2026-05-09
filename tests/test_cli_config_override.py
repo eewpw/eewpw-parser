@@ -44,6 +44,27 @@ class TestCLIConfigOverride(unittest.TestCase):
             first_key_line = next((ln for ln in lines if ln.startswith(" ")), "")
             self.assertTrue(first_key_line.startswith("   "), msg=f"Indent not applied: {first_key_line}")
 
+    def test_cli_rejects_invalid_config_root_for_parse_mode(self):
+        with tempfile.TemporaryDirectory() as td:
+            invalid_root = Path(td) / "missing-dir"
+            log_path = ROOT / "tests" / "test-data" / "scvsmag-processing-info.log"
+            out_path = Path(td) / "out.json"
+
+            cmd = CLI + [
+                "--algo",
+                "vs",
+                "--dialect",
+                "scvsmag",
+                "--output",
+                str(out_path),
+                "--config-root",
+                str(invalid_root),
+                str(log_path),
+            ]
+            result = subprocess.run(cmd, capture_output=True, text=True, env=ENV, cwd=td)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("--config-root must be an existing directory", result.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()
