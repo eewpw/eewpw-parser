@@ -384,7 +384,7 @@ def main() -> int:
             print(f"[replay] Finished writing fake logs under tmp", flush=True)
         return 0
     except SystemExit as e:
-        return int(getattr(e, "code", 1) or 1)
+        return int(getattr(e, "code", 1))
     except Exception as exc:
         print(f"Replay failed: {exc}", file=sys.stderr)
         return 1
