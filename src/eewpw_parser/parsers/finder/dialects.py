@@ -1179,6 +1179,29 @@ class ShakeAlertFinderDialect(FinderBaseDialect):
     P_INLINE_ABS_TS = re.compile(
         r"(\d{4}[/-]\d{2}[/-]\d{2}[\s,]\d{2}:\d{2}:\d{2}(?:[:.]\d{1,6})?)"
     )
+    P_INLINE_TIME_ONLY_TS = re.compile(
+        r"^\s*(\d{2}:\d{2}:\d{2}(?:[:.]\d{1,6})?)\b"
+    )
+
+    def _resolve_annotation_ts_iso(
+        self,
+        line: str,
+        state: FinderStreamState,
+    ) -> Optional[str]:
+        m_inline = self.P_INLINE_ABS_TS.search(line)
+        if m_inline:
+            return to_iso_utc_z(m_inline.group(1).replace(",", " "))
+
+        m_time_only = self.P_INLINE_TIME_ONLY_TS.search(line)
+        if not m_time_only:
+            return None
+
+        context_iso = state.file_end_ts_iso or state.file_start_ts_iso
+        if not context_iso or "T" not in context_iso:
+            return None
+
+        date_part = context_iso.split("T", 1)[0]
+        return to_iso_utc_z(f"{date_part} {m_time_only.group(1)}")
 
     def _parse_annotations_stream(
         self,
@@ -1190,13 +1213,9 @@ class ShakeAlertFinderDialect(FinderBaseDialect):
 
         for idx, line in enumerate(lines):
             absolute_line = state.line_offset + idx + 1
-            m_inline = self.P_INLINE_ABS_TS.search(line)
-            if not m_inline:
+            ts_iso = self._resolve_annotation_ts_iso(line, state)
+            if ts_iso is None:
                 continue
-
-            ts_raw = m_inline.group(1)
-            ts_raw_norm = ts_raw.replace(",", " ")
-            ts_iso = to_iso_utc_z(ts_raw_norm)
 
             if state.file_start_ts_iso is None:
                 state.file_start_ts_iso = ts_iso
