@@ -18,6 +18,7 @@ def write_vs_lines(p: Path):
         "2025/11/24 12:00:00 [processing/info/VsMagnitude] Start logging for event: EVT1\n",
         "2025/11/24 12:00:01 [processing/info/VsMagnitude] VS-mag: 4.2; median single-station-mag: 4.0; lat: 35.0; lon: -120.0; depth : 5.0\n",
         "2025/11/24 12:00:01 [processing/info/VsMagnitude] creation time: 2025-11-24 12:00:01; origin time: 2025-11-24 12:00:00;\n",
+        "2025/11/24 12:00:01 [processing/info/VsMagnitude] likelihood: 0.95\n",
         "2025/11/24 12:00:02 [processing/info/VsMagnitude] End logging for event: EVT1\n",
     ]
     p.write_text("".join(lines), encoding="utf-8")

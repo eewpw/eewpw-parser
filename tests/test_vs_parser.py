@@ -41,9 +41,11 @@ class TestVSParser(unittest.TestCase):
         temp_content = (
             "2025/11/24 12:00:00 [processing/info/VsMagnitude] Start logging for event: test20251124\n"
             + text_numeric
+            + "2025/11/24 12:00:01 [processing/info/VsMagnitude] likelihood: 0.90\n"
             + "2025/11/24 12:00:01 [processing/info/VsMagnitude] End logging for event: test20251124\n"
             + "2025/11/24 12:00:02 [processing/info/VsMagnitude] Start logging for event: test20251124\n"
             + text_nan
+            + "2025/11/24 12:00:03 [processing/info/VsMagnitude] likelihood: 0.80\n"
             + "2025/11/24 12:00:03 [processing/info/VsMagnitude] End logging for event: test20251124\n"
         )
         temp_file = sample_path.parent / "temp_vs_mag.log"
@@ -60,6 +62,27 @@ class TestVSParser(unittest.TestCase):
             self.assertIsNone(d2.core_info.vs_median_single_station_mag)
             # main magnitude unaffected
             self.assertAlmostEqual(float(d1.core_info.mag), 4.2, places=1)
+        finally:
+            try:
+                temp_file.unlink()
+            except FileNotFoundError:
+                pass
+
+    def test_update_only_blocks_do_not_emit_detections(self):
+        parser = VSParser({"dialect": "scvsmag"})
+        sample_path = Path(SAMPLE_LOG)
+        temp_content = (
+            "2025/11/24 12:00:00 [processing/info/VsMagnitude] Start logging for event: evt-end-only\n"
+            + "2025/11/24 12:00:00 [processing/info/VsMagnitude] update number: 7\n"
+            + "2025/11/24 12:00:01 [processing/info/VsMagnitude] End logging for event: evt-end-only\n"
+            + "2025/11/24 12:00:02 [processing/info/VsMagnitude] Start logging for event: evt-flush-only\n"
+            + "2025/11/24 12:00:02 [processing/info/VsMagnitude] update number: 8\n"
+        )
+        temp_file = sample_path.parent / "temp_vs_update_only.log"
+        temp_file.write_text(temp_content, encoding="utf-8")
+        try:
+            doc = parser.parse([str(temp_file)])
+            self.assertEqual(doc.detections, [])
         finally:
             try:
                 temp_file.unlink()

@@ -9,20 +9,26 @@ from eewpw_parser.parsers.vs.dialects import VSDialect, VSStreamState  # noqa: E
 
 SAMPLE_SNIPPET = """\
 2025/11/24 12:00:00 [processing/info/VsMagnitude] Start logging for event: EVT1
+2025/11/24 12:00:00 [processing/info/VsMagnitude] update number: 7
+2025/11/24 12:00:00 [processing/info/VsMagnitude] VS-mag: 4.6; median single-station-mag: 4.4; lat: 35.1; lon: -120.2; depth : 6.0
 2025/11/24 12:00:00 [processing/info/VsMagnitude] creation time: 2025-11-24 12:00:00; origin time: 2025-11-24 11:59:50;
 2025/11/24 12:00:00 [processing/info/VsMagnitude] Sensor: NET.STA.HHZ; Wavetype: Z; Soil class: SOIL; Magnitude: 3.2
 2025/11/24 12:00:00 [processing/info/VsMagnitude] station lat: 1.0; station lon: 2.0; epicentral distance: 12.3;
 2025/11/24 12:00:00 [processing/info/VsMagnitude] PGA(Z): 1.0; PGV(Z): 2.0; PGD(Z): 3.0
 2025/11/24 12:00:00 [processing/info/VsMagnitude] PGA(H): 4.0; PGV(H): 5.0; PGD(H): 6.0
+2025/11/24 12:00:00 [processing/info/VsMagnitude] likelihood: 0.98
 2025/11/24 12:00:01 [processing/info/VsMagnitude] End logging for event: EVT1
 """
 
 SENTINEL_SNIPPET = """\
 2025/11/24 12:00:00 [processing/info/VsMagnitude] Start logging for event: EVT2
+2025/11/24 12:00:00 [processing/info/VsMagnitude] update number: 3
+2025/11/24 12:00:00 [processing/info/VsMagnitude] VS-mag: 4.1; median single-station-mag: nan; lat: 35.0; lon: -120.0; depth : 5.0
 2025/11/24 12:00:00 [processing/info/VsMagnitude] creation time: 2025-11-24 12:00:00; origin time: 2025-11-24 11:59:40;
 2025/11/24 12:00:00 [processing/info/VsMagnitude] Sensor: NET.STA.HHZ; Wavetype: Z; Soil class: SOIL; Magnitude: nan
 2025/11/24 12:00:00 [processing/info/VsMagnitude] station lat: 1.0; station lon: 2.0; epicentral distance: 12.3;
 2025/11/24 12:00:00 [processing/info/VsMagnitude] PGA(Z): -1.00e+00; PGV(Z): -1.00e+00; PGD(Z): -1.00e+00
+2025/11/24 12:00:00 [processing/info/VsMagnitude] likelihood: 0.95
 2025/11/24 12:00:01 [processing/info/VsMagnitude] End logging for event: EVT2
 """
 
@@ -42,6 +48,12 @@ def _parse_snippet(text: str):
 def test_one_update_block_produces_one_detection():
     dets = _parse_snippet(SAMPLE_SNIPPET)
     assert len(dets) == 1
+    det = dets[0]
+    assert det.core_info.mag == "4.6"
+    assert det.core_info.lat == "35.1"
+    assert det.core_info.lon == "-120.2"
+    assert det.core_info.depth == "6.0"
+    assert det.core_info.likelihood == "0.98"
 
 
 def test_detection_timestamp_matches_obs_time_and_origin():
@@ -69,3 +81,29 @@ def test_sentinel_values_do_not_emit_observations():
         if (obs.extra.get("vs") or {}).get("is_sentinel")
     ]
     assert len(sentinels) >= 1
+
+
+def test_update_only_block_end_emits_no_detection():
+    text = """\
+2025/11/24 12:00:00 [processing/info/VsMagnitude] Start logging for event: EVT3
+2025/11/24 12:00:00 [processing/info/VsMagnitude] update number: 8
+2025/11/24 12:00:01 [processing/info/VsMagnitude] End logging for event: EVT3
+"""
+    dets = _parse_snippet(text)
+    assert dets == []
+
+
+def test_update_only_block_flush_emits_no_detection():
+    dialect = VSDialect()
+    state = VSStreamState()
+    lines = [
+        "2025/11/24 12:00:00 [processing/info/VsMagnitude] Start logging for event: EVT4\n",
+        "2025/11/24 12:00:00 [processing/info/VsMagnitude] update number: 9\n",
+    ]
+    dets = []
+    for line in lines:
+        d_chunk, _ = dialect.feed_line(line, state)
+        dets.extend(d_chunk)
+    d_flush, _ = dialect.flush(state)
+    dets.extend(d_flush)
+    assert dets == []

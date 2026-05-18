@@ -72,6 +72,22 @@ class VSEventState:
     stations_not_used: List[str] = field(default_factory=list)
     summary_fields: Dict[str, str] = field(default_factory=dict)
 
+    def is_complete_solution(self) -> bool:
+        """
+        Return True only when the VS block has required solution fields.
+        """
+        return all(
+            value is not None
+            for value in (
+                self.event_id,
+                self.vs_mag,
+                self.likelihood,
+                self.lat,
+                self.lon,
+                self.depth,
+            )
+        )
+
     def start_station(
         self,
         sncl: str,
@@ -380,7 +396,7 @@ class VSDialect:
         m_start = self.P_START.search(message)
         if m_start:
             # Flush current event if any
-            if state.current_event and state.current_event.event_id:
+            if state.current_event and state.current_event.is_complete_solution():
                 dets.append(state.current_event.to_detection(state.version_by_event))
             state.current_event = VSEventState(event_id=m_start.group(1), last_ts_iso=ts_iso)
             if self.verbose:
@@ -391,7 +407,8 @@ class VSDialect:
         if m_end and state.current_event:
             state.current_event.last_ts_iso = ts_iso
             state.current_event.flush_station()
-            dets.append(state.current_event.to_detection(state.version_by_event))
+            if state.current_event.is_complete_solution():
+                dets.append(state.current_event.to_detection(state.version_by_event))
             if self.verbose:
                 ev = state.current_event
                 print(
@@ -471,7 +488,7 @@ class VSDialect:
     def flush(self, state: VSStreamState) -> Tuple[List[Detection], List[Annotation]]:
         dets: List[Detection] = []
         ann: List[Annotation] = []
-        if state.current_event and state.current_event.event_id:
+        if state.current_event and state.current_event.is_complete_solution():
             dets.append(state.current_event.to_detection(state.version_by_event))
-            state.current_event = None
+        state.current_event = None
         return dets, ann
